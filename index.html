@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RunPlanner — Parcours et séances de course à pied</title>
+<meta name="description" content="Générateur de parcours de course à pied : routes, chemins, et séances structurées (fractionné, côtes, tempo).">
+<meta name="theme-color" content="#10161A">
+
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<!-- Thème appliqué AVANT le premier rendu, pour éviter tout flash visuel (leçon #12) -->
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('rp_theme');
+      var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) { /* localStorage indisponible : on garde le thème par défaut */ }
+  })();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header id="rp-topbar">
+  <h1 id="rp-logo">Run<span>Planner</span></h1>
+  <button id="theme-toggle" aria-label="Changer de thème">🌓</button>
+</header>
+
+<main id="rp-main">
+  <div id="map" role="application" aria-label="Carte du parcours"></div>
+
+  <aside id="rp-sheet">
+    <div id="panel-handle" aria-hidden="true"></div>
+
+    <div class="rp-field">
+      <label for="address-search">Adresse de départ</label>
+      <input id="address-search" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
+      <ul id="address-results"></ul>
+    </div>
+
+    <div class="rp-point-buttons">
+      <button class="rp-btn" id="set-start-btn">📍 Placer le départ</button>
+      <button class="rp-btn" id="set-end-btn">🏁 Placer l'arrivée</button>
+      <button class="rp-btn" id="add-waypoint-btn">➕ Point de passage</button>
+    </div>
+
+    <nav class="rp-tabs" role="tablist">
+      <button class="rp-tab rp-tab-active" data-mode="route">Route</button>
+      <button class="rp-tab" data-mode="chemins">Chemins</button>
+      <button class="rp-tab" data-mode="exercices">Exercices</button>
+    </nav>
+
+    <!-- ===== MODE ROUTE ===== -->
+    <section class="rp-mode-panel" data-for-mode="route">
+      <div class="rp-submodes">
+        <button class="rp-submode rp-active" data-submode="boucle">Boucle</button>
+        <button class="rp-submode" data-submode="boucle-aleatoire">Boucle aléatoire</button>
+        <button class="rp-submode" data-submode="aller-retour">Aller-retour</button>
+        <button class="rp-submode" data-submode="a-vers-b">A → B</button>
+        <button class="rp-submode" data-submode="points-de-passage">Points de passage</button>
+        <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
+      </div>
+      <div class="rp-field">
+        <label for="route-distance">Distance cible (km)</label>
+        <input id="route-distance" type="number" min="1" step="0.5" value="5">
+      </div>
+    </section>
+
+    <!-- ===== MODE CHEMINS ===== -->
+    <section class="rp-mode-panel" data-for-mode="chemins" hidden>
+      <div class="rp-submodes">
+        <button class="rp-submode rp-active" data-submode="boucle">Boucle</button>
+        <button class="rp-submode" data-submode="boucle-aleatoire">Boucle aléatoire</button>
+        <button class="rp-submode" data-submode="aller-retour">Aller-retour</button>
+        <button class="rp-submode" data-submode="a-vers-b">A → B</button>
+        <button class="rp-submode" data-submode="points-de-passage">Points de passage</button>
+        <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
+      </div>
+      <div class="rp-field">
+        <label for="chemins-distance">Distance cible (km)</label>
+        <input id="chemins-distance" type="number" min="1" step="0.5" value="8">
+      </div>
+    </section>
+
+    <!-- ===== MODE EXERCICES ===== -->
+    <section class="rp-mode-panel" data-for-mode="exercices" hidden id="exercices-panel">
+      <div class="rp-submodes">
+        <button class="rp-submode rp-active" data-submode="fractionne">Fractionné</button>
+        <button class="rp-submode" data-submode="cotes">Côtes</button>
+        <button class="rp-submode" data-submode="sortie-longue">Sortie longue</button>
+        <button class="rp-submode" data-submode="tempo">Tempo</button>
+        <button class="rp-submode" data-submode="recuperation">Récupération</button>
+      </div>
+
+      <div class="rp-field">
+        <label for="exo-pace">Allure estimée (min/km)</label>
+        <input id="exo-pace" type="number" min="3" step="0.1" value="5.5">
+      </div>
+
+      <div class="rp-subform" data-submode="fractionne">
+        <div class="rp-row">
+          <div class="rp-field"><label for="exo-reps">Répétitions</label><input id="exo-reps" type="number" min="1" value="6"></div>
+          <div class="rp-field"><label for="exo-shape">Forme</label>
+            <select id="exo-shape"><option value="aller-retour">Aller-retour</option><option value="boucle">Boucle</option></select>
+          </div>
+        </div>
+        <div class="rp-row">
+          <div class="rp-field"><label for="exo-effort-value">Effort</label><input id="exo-effort-value" type="number" value="400"></div>
+          <div class="rp-field"><label for="exo-effort-unit">Unité</label>
+            <select id="exo-effort-unit"><option value="m">mètres</option><option value="min">minutes</option></select>
+          </div>
+        </div>
+        <div class="rp-row">
+          <div class="rp-field"><label for="exo-recovery-value">Récupération</label><input id="exo-recovery-value" type="number" value="200"></div>
+          <div class="rp-field"><label for="exo-recovery-unit">Unité</label>
+            <select id="exo-recovery-unit"><option value="m">mètres</option><option value="min">minutes</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="rp-subform" data-submode="cotes" hidden>
+        <div class="rp-field"><label for="cote-reps">Répétitions</label><input id="cote-reps" type="number" min="1" value="6"></div>
+      </div>
+
+      <div class="rp-subform" data-submode="sortie-longue" hidden>
+        <div class="rp-row">
+          <div class="rp-field"><label for="variant-distance">Distance (km)</label><input id="variant-distance" type="number" min="1" value="14"></div>
+          <div class="rp-field"><label for="variant-terrain">Terrain</label>
+            <select id="variant-terrain"><option value="route">Route</option><option value="chemins">Chemins</option></select>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <button class="rp-btn-primary" id="generate-btn">Générer le parcours</button>
+
+    <div class="rp-summary-card" id="result-summary" hidden></div>
+
+    <ul id="poi-list"></ul>
+
+    <div class="rp-export-row">
+      <button class="rp-btn" id="export-gpx">Export GPX</button>
+      <button class="rp-btn" id="export-tcx">Export TCX</button>
+      <button class="rp-btn" id="export-fit">Export FIT</button>
+    </div>
+  </aside>
+</main>
+
+<!-- Panneau de diagnostic (leçon #10) -->
+<div id="diag-panel" class="rp-diag-collapsed">
+  <div id="diag-header">
+    <span id="diag-toggle" style="cursor:pointer;">🩺 Diagnostic</span>
+    <span id="diag-version">v0</span>
+  </div>
+  <pre id="diag-log"></pre>
+  <div id="diag-actions">
+    <button id="diag-copy">Copier le journal</button>
+    <button id="diag-clear">Vider</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="js/config.js"></script>
+<script src="js/diagnostics.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/map.js"></script>
+<script src="js/geocoder.js"></script>
+<script src="js/routing.js"></script>
+<script src="js/loops.js"></script>
+<script src="js/exercises.js"></script>
+<script src="js/citytour.js"></script>
+<script src="js/export.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

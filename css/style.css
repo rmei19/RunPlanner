@@ -1,0 +1,347 @@
+/* =========================================================================
+   RunPlanner — style.css
+   Identité : piste d'athlétisme la nuit + étiquettes de dossard ("bib tags")
+   pour tout ce qui marque une distance ou un segment d'effort.
+   ========================================================================= */
+
+:root {
+  --rp-bg: #10161A;
+  --rp-surface: #1A2226;
+  --rp-surface-2: #212C31;
+  --rp-text: #F4F1E8;
+  --rp-text-dim: #9CA8A6;
+  --rp-line: rgba(244, 241, 232, 0.10);
+  --rp-effort: #FF5A3C;
+  --rp-recovery: #35D4A7;
+  --rp-route-accent: #E8C15A;
+  --rp-shadow: rgba(0, 0, 0, 0.35);
+  --rp-radius: 10px;
+  --rp-font-display: 'Bebas Neue', 'Oswald', sans-serif;
+  --rp-font-body: 'Inter', system-ui, sans-serif;
+  --rp-font-mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+[data-theme="light"] {
+  --rp-bg: #F3F1EA;
+  --rp-surface: #FFFFFF;
+  --rp-surface-2: #EBE7DC;
+  --rp-text: #171E1A;
+  --rp-text-dim: #5B655F;
+  --rp-line: rgba(23, 30, 26, 0.10);
+  --rp-shadow: rgba(23, 30, 26, 0.12);
+}
+
+/* Règle globale indispensable (leçon #2) : sans elle, un élément `hidden` avec
+   une classe display:flex/block reste visible en permanence. */
+[hidden] { display: none !important; }
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--rp-bg);
+  color: var(--rp-text);
+  font-family: var(--rp-font-body);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---------- Barre supérieure ---------- */
+#rp-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--rp-surface);
+  border-bottom: 1px solid var(--rp-line);
+  z-index: 500;
+}
+
+#rp-logo {
+  font-family: var(--rp-font-display);
+  font-size: 26px;
+  letter-spacing: 1px;
+  color: var(--rp-effort);
+  margin: 0;
+}
+#rp-logo span { color: var(--rp-text); }
+
+#theme-toggle {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--rp-line);
+  color: var(--rp-text);
+  border-radius: 999px;
+  width: 36px; height: 36px;
+  cursor: pointer;
+}
+
+/* ---------- Layout principal ---------- */
+#rp-main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+
+#map {
+  flex: 1;
+  height: 100%;
+  background: #0c1114;
+}
+
+/* ---------- Panneau latéral (desktop) / feuille coulissante (mobile) ---------- */
+#rp-sheet {
+  width: 380px;
+  background: var(--rp-surface);
+  border-right: 1px solid var(--rp-line);
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#panel-handle { display: none; }
+
+/* ---------- Onglets de mode — motif "ligne de départ" ---------- */
+.rp-tabs {
+  display: flex;
+  border-bottom: 2px dashed var(--rp-line);
+  padding-bottom: 8px;
+  gap: 6px;
+}
+
+.rp-tab {
+  flex: 1;
+  padding: 10px 6px;
+  background: var(--rp-surface-2);
+  border: none;
+  border-radius: var(--rp-radius);
+  color: var(--rp-text-dim);
+  font-family: var(--rp-font-display);
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.rp-tab-active {
+  background: var(--rp-effort);
+  color: #14100C;
+}
+
+/* ---------- Sous-modes ---------- */
+.rp-submodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rp-submode {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--rp-line);
+  background: transparent;
+  color: var(--rp-text-dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+.rp-submode.rp-active {
+  border-color: var(--rp-recovery);
+  color: var(--rp-recovery);
+}
+
+/* ---------- Formulaires ---------- */
+.rp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.rp-field label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--rp-text-dim);
+}
+.rp-field input, .rp-field select {
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-line);
+  color: var(--rp-text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--rp-font-mono);
+  font-size: 14px;
+}
+
+.rp-row { display: flex; gap: 8px; }
+.rp-row > * { flex: 1; }
+
+#address-search { width: 100%; }
+#address-results {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+#address-results li {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rp-line);
+  cursor: pointer;
+  font-size: 13px;
+}
+#address-results li:hover { background: var(--rp-surface-2); }
+
+.rp-point-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.rp-btn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--rp-line);
+  background: var(--rp-surface-2);
+  color: var(--rp-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.rp-btn-primary {
+  background: var(--rp-effort);
+  border-color: var(--rp-effort);
+  color: #14100C;
+  font-family: var(--rp-font-display);
+  font-size: 16px;
+  letter-spacing: 0.5px;
+  padding: 12px;
+  width: 100%;
+}
+.rp-btn-primary:disabled { opacity: 0.6; cursor: wait; }
+
+/* ---------- Résumé résultat ---------- */
+.rp-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--rp-surface-2);
+  border-radius: var(--rp-radius);
+  padding: 14px;
+}
+.rp-summary-figure {
+  font-family: var(--rp-font-display);
+  font-size: 34px;
+  color: var(--rp-recovery);
+}
+.rp-summary-figure small { font-size: 16px; color: var(--rp-text-dim); }
+.rp-summary-sub { font-size: 12px; color: var(--rp-text-dim); font-family: var(--rp-font-mono); }
+.rp-summary-delta { font-size: 12px; color: var(--rp-route-accent); }
+.rp-error { color: var(--rp-effort); font-size: 13px; }
+
+.rp-export-row { display: flex; gap: 8px; }
+
+#poi-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13px; max-height: 140px; overflow-y: auto; }
+#poi-list li { padding: 6px 0; border-bottom: 1px solid var(--rp-line); }
+
+/* ---------- Étiquettes "bib" (signature visuelle) ---------- */
+.rp-bib-label span {
+  display: inline-block;
+  background: var(--rp-surface);
+  color: var(--rp-bib-color, var(--rp-text));
+  border: 1.5px solid var(--rp-bib-color, var(--rp-text));
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-family: var(--rp-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  transform: rotate(-2deg);
+  box-shadow: 1px 2px 0 var(--rp-shadow);
+}
+.rp-bib-km span { transform: rotate(2deg); opacity: 0.9; }
+
+/* ---------- Panneau de diagnostic ---------- */
+#diag-panel {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: #0B0F11;
+  color: #8FE3C0;
+  font-family: var(--rp-font-mono);
+  font-size: 11px;
+  z-index: 2000;
+  border-top: 1px solid var(--rp-line);
+  max-height: 40vh;
+  display: flex;
+  flex-direction: column;
+}
+#diag-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  background: #10161A;
+}
+#diag-version {
+  background: var(--rp-effort);
+  color: #14100C;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-weight: 700;
+}
+#diag-log {
+  overflow-y: auto;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  margin: 0;
+}
+.rp-diag-collapsed #diag-log,
+.rp-diag-collapsed #diag-actions { display: none; }
+#diag-actions { display: flex; gap: 6px; padding: 0 10px 8px; }
+#diag-actions button {
+  background: var(--rp-surface-2);
+  color: var(--rp-text);
+  border: 1px solid var(--rp-line);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* =========================================================================
+   Mobile — panneau en feuille coulissante positionnée en `top` (pourcentages),
+   jamais en transform:translateY (leçon #8 : plus fiable avec la barre
+   d'adresse mobile). Ces règles restent confinées à ce media query pour ne
+   jamais entrer en conflit de spécificité avec le CSS desktop.
+   ========================================================================= */
+@media (max-width: 767px) {
+  #rp-main { flex-direction: column; }
+
+  #rp-sheet {
+    position: fixed;
+    left: 0; right: 0;
+    top: 82%;
+    height: 100%;
+    width: 100%;
+    border-right: none;
+    border-top: 1px solid var(--rp-line);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 20px var(--rp-shadow);
+    transition: top 0.25s ease;
+    z-index: 900;
+  }
+  #rp-sheet.rp-sheet-expanded { top: 12%; }
+
+  #panel-handle {
+    display: block;
+    width: 40px;
+    height: 4px;
+    background: var(--rp-line);
+    border-radius: 999px;
+    margin: 0 auto 10px;
+    cursor: pointer;
+  }
+
+  #map { height: 100%; }
+  #diag-panel { max-height: 55vh; }
+}
