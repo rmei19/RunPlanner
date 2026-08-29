@@ -24,6 +24,20 @@
 
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
+
+    // Si un nouveau service worker prend le contrôle (mise à jour déployée),
+    // on recharge une seule fois automatiquement : sans ça, la page ouverte
+    // continue de tourner avec l'ancien JS déjà chargé en mémoire, même si
+    // les nouveaux fichiers sont bien sur le serveur (source fréquente de
+    // "ça ne marche plus" après une mise à jour, alors que le code est bon).
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return;
+      reloaded = true;
+      RPDiag.log('info', 'Nouvelle version activée, rechargement...');
+      window.location.reload();
+    });
+
     // chemin relatif : fonctionne aussi bien à la racine que sur un sous-chemin GitHub Pages
     navigator.serviceWorker.register('service-worker.js').then(reg => {
       RPDiag.log('info', 'Service worker enregistré.');

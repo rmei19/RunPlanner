@@ -74,7 +74,9 @@ const RPUi = (() => {
     const sheet = document.getElementById('rp-sheet');
     if (!handle || !sheet) return;
     handle.addEventListener('click', () => {
-      sheet.classList.toggle('rp-sheet-expanded');
+      const expanded = sheet.classList.toggle('rp-sheet-expanded');
+      handle.setAttribute('aria-expanded', String(expanded));
+      try { RPDiag.log('info', `Volet ${expanded ? 'ouvert' : 'fermé'}.`); } catch (_) {}
     });
   }
 
