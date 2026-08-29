@@ -14,6 +14,9 @@ const RPMap = (() => {
   };
   let markersLayer = L.featureGroup();
   let poiLayer = L.featureGroup();
+  let userLocationMarker = null;
+  let userAccuracyCircle = null;
+  let locationCallbacks = [];
 
   function init(containerId) {
     map = L.map(containerId, {
@@ -43,13 +46,41 @@ const RPMap = (() => {
     markersLayer.addTo(map);
     poiLayer.addTo(map);
 
-    // Géolocalisation best-effort au démarrage, jamais bloquante.
-    map.locate({ setView: false, timeout: 4000 });
+    // Géolocalisation best-effort au démarrage, jamais bloquante (réseau/GPS
+    // selon ce que le navigateur choisit — enableHighAccuracy demande le GPS
+    // quand disponible plutôt que la seule position réseau/Wi-Fi).
     map.on('locationfound', (e) => {
-      map.setView(e.latlng, 14);
+      showUserLocationMarker(e.latlng, e.accuracy);
+      map.setView(e.latlng, 15);
+      locationCallbacks.forEach(cb => {
+        try { cb(e.latlng, e.accuracy); } catch (err) { console.error(err); }
+      });
     });
+    map.on('locationerror', (e) => {
+      try { RPDiag.log('warn', 'Géolocalisation indisponible: ' + e.message); } catch (_) {}
+    });
+    locateMe();
 
     return map;
+  }
+
+  /** (Re)déclenche une localisation. Utilisable au démarrage et depuis un bouton "Me localiser". */
+  function locateMe() {
+    if (!map) return;
+    map.locate({ setView: false, timeout: 8000, enableHighAccuracy: true, maximumAge: 30000 });
+  }
+
+  /** Enregistre un callback appelé à chaque localisation réussie: cb(latlng, accuracyM). */
+  function onLocationFound(cb) {
+    locationCallbacks.push(cb);
+  }
+
+  function showUserLocationMarker(latlng, accuracyM) {
+    if (userLocationMarker) markersLayer.removeLayer(userLocationMarker);
+    if (userAccuracyCircle) markersLayer.removeLayer(userAccuracyCircle);
+    userAccuracyCircle = L.circle(latlng, { radius: accuracyM, color: '#35D4A7', weight: 1, fillOpacity: 0.08 }).addTo(markersLayer);
+    userLocationMarker = L.circleMarker(latlng, { radius: 7, color: '#35D4A7', fillColor: '#35D4A7', fillOpacity: 1, weight: 2 })
+      .addTo(markersLayer).bindTooltip('Votre position');
   }
 
   function clearRoute(mode) {
@@ -74,6 +105,7 @@ const RPMap = (() => {
 
   return {
     init, clearRoute, clearAllRoutes, getMap,
-    getRouteLayer, getMarkersLayer, getPoiLayer, fitToLayer
+    getRouteLayer, getMarkersLayer, getPoiLayer, fitToLayer,
+    locateMe, onLocationFound
   };
 })();

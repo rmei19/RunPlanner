@@ -1,6 +1,22 @@
 /**
  * ui.js — Câblage de l'interface : onglets de mode, formulaires, résultats,
- * étiquettes "bib" sur la carte (km, effort/récup), panneau mobile coulissant.
+ * étiquettes "bib" sur la carte, panneau mobile coulissant.
+ *
+ * v0.2.0 — correctifs :
+ *  - RPTheme.init() n'est plus appelé ici (il ne l'est que depuis app.js) :
+ *    l'appeler deux fois attachait deux écouteurs de clic sur le bouton de
+ *    thème, qui basculait donc deux fois de suite = aucun changement visible.
+ *  - Chaque étape d'initialisation ci-dessous est isolée en try/catch :
+ *    avant, une erreur dans une seule étape (ex: un champ manquant) stoppait
+ *    net l'exécution de RPUi.init(), ce qui désactivait AUSSI tous les
+ *    écouteurs suivants (clic carte, bouton générer, exports...). C'est la
+ *    cause la plus probable du "clic sur la carte ne fait rien".
+ *  - Ajout : géolocalisation automatique + bouton "Me localiser".
+ *  - Ajout : champs d'adresse séparés pour départ / arrivée / point de passage.
+ *  - Clic carte : le mode "départ" reste actif par défaut après chaque clic
+ *    (avant, un 2e clic sans bouton pressé ajoutait silencieusement un point
+ *    de passage au lieu de déplacer le départ, ce qui semblait ne "rien faire"
+ *    de prévisible).
  */
 
 const RPUi = (() => {
@@ -10,17 +26,30 @@ const RPUi = (() => {
   let waypoints = [];
   let lastResult = null;
   let lastSegments = null;
-  let placingFor = null; // 'start' | 'end' | 'waypoint' | null
+  let placingFor = 'start'; // 'start' | 'end' | 'waypoint' — mode actif pour le clic carte
+  let startSetAutomatically = false;
 
   function init() {
-    initModeTabs();
-    initPanelToggle();
-    initSearchBox();
-    initMapClickHandling();
-    initGenerateButton();
-    initExportButtons();
-    initExerciseSubforms();
-    RPTheme.init();
+    const steps = [
+      ['onglets de mode', initModeTabs],
+      ['panneau mobile', initPanelToggle],
+      ['recherche d\'adresses', initAddressFields],
+      ['géolocalisation', initGeolocation],
+      ['clic sur la carte', initMapClickHandling],
+      ['boutons de placement', initPointButtons],
+      ['bouton générer', initGenerateButton],
+      ['boutons d\'export', initExportButtons],
+      ['sous-formulaires exercices', initExerciseSubforms],
+    ];
+    for (const [name, fn] of steps) {
+      try {
+        fn();
+      } catch (e) {
+        console.error(`RPUi.init: échec de l'étape "${name}"`, e);
+        try { RPDiag.log('error', `Échec init UI "${name}": ${e.message}`); } catch (_) {}
+      }
+    }
+    updatePlacingHint();
     RPDiag.log('info', 'Interface initialisée.');
   }
 
@@ -49,11 +78,17 @@ const RPUi = (() => {
     });
   }
 
-  // ---------- Recherche d'adresse ----------
-  function initSearchBox() {
-    const input = document.getElementById('address-search');
-    const results = document.getElementById('address-results');
-    if (!input || !results) return;
+  // ---------- Recherche d'adresse (3 champs indépendants : départ / arrivée / passage) ----------
+  function initAddressFields() {
+    wireAddressField('address-search', 'address-results', 'start');
+    wireAddressField('address-search-end', 'address-results-end', 'end');
+    wireAddressField('address-search-waypoint', 'address-results-waypoint', 'waypoint');
+  }
+
+  function wireAddressField(inputId, resultsId, target) {
+    const input = document.getElementById(inputId);
+    const results = document.getElementById(resultsId);
+    if (!input || !results) return; // champ pas présent dans ce build : on ignore proprement
 
     let debounce = null;
     input.addEventListener('input', () => {
@@ -66,9 +101,10 @@ const RPUi = (() => {
           const li = document.createElement('li');
           li.textContent = m.label;
           li.addEventListener('click', () => {
-            setPoint({ lat: m.lat, lon: m.lon }, placingFor || 'start');
+            setPoint({ lat: m.lat, lon: m.lon }, target);
             input.value = m.label;
             results.innerHTML = '';
+            if (target === 'waypoint') input.value = ''; // champ réutilisable pour ajouter plusieurs points
           });
           results.appendChild(li);
         });
@@ -76,23 +112,68 @@ const RPUi = (() => {
     });
   }
 
+  // ---------- Géolocalisation ----------
+  function initGeolocation() {
+    RPMap.onLocationFound((latlng, accuracyM) => {
+      // Ne positionne AUTOMATIQUEMENT le départ que si l'utilisateur n'a pas
+      // déjà choisi un point lui-même (recherche ou clic manuel).
+      if (!startPoint || startSetAutomatically) {
+        startSetAutomatically = true;
+        setPoint({ lat: latlng.lat, lon: latlng.lng }, 'start');
+        RPGeocoder.reverse(latlng.lat, latlng.lng).then(label => {
+          const input = document.getElementById('address-search');
+          if (input && !input.value) input.value = label;
+        });
+        RPDiag.log('info', `Position détectée automatiquement (précision ~${Math.round(accuracyM)} m).`);
+      }
+    });
+
+    document.getElementById('locate-me-btn')?.addEventListener('click', () => {
+      RPDiag.log('info', 'Nouvelle tentative de géolocalisation demandée.');
+      RPMap.locateMe();
+    });
+  }
+
   // ---------- Placement de points sur la carte ----------
   function initMapClickHandling() {
     const map = RPMap.getMap();
+    if (!map) throw new Error('Carte non initialisée : impossible de gérer les clics.');
     map.on('click', (e) => {
-      const target = placingFor || (startPoint ? 'waypoint' : 'start');
-      setPoint({ lat: e.latlng.lat, lon: e.latlng.lng }, target);
+      setPoint({ lat: e.latlng.lat, lon: e.latlng.lng }, placingFor);
+      // Le mode "départ" reste l'action par défaut après chaque clic ; les
+      // modes "arrivée" et "point de passage" ne s'appliquent qu'au clic
+      // suivant (déclenchés explicitement par les boutons ci-dessous), pour
+      // éviter qu'un simple clic supplémentaire n'ajoute silencieusement des
+      // points de passage non voulus.
+      if (placingFor !== 'start') {
+        placingFor = 'start';
+        updatePlacingHint();
+      }
     });
+  }
 
-    document.getElementById('set-start-btn')?.addEventListener('click', () => placingFor = 'start');
-    document.getElementById('set-end-btn')?.addEventListener('click', () => placingFor = 'end');
-    document.getElementById('add-waypoint-btn')?.addEventListener('click', () => placingFor = 'waypoint');
+  function initPointButtons() {
+    document.getElementById('set-start-btn')?.addEventListener('click', () => { placingFor = 'start'; updatePlacingHint(); });
+    document.getElementById('set-end-btn')?.addEventListener('click', () => { placingFor = 'end'; updatePlacingHint(); });
+    document.getElementById('add-waypoint-btn')?.addEventListener('click', () => { placingFor = 'waypoint'; updatePlacingHint(); });
+  }
+
+  function updatePlacingHint() {
+    const hint = document.getElementById('placing-hint');
+    if (!hint) return;
+    const labels = {
+      start: 'Cliquez sur la carte pour placer le départ 🏁',
+      end: 'Cliquez sur la carte pour placer l\'arrivée 🏁',
+      waypoint: 'Cliquez sur la carte pour ajouter un point de passage ➕'
+    };
+    hint.textContent = labels[placingFor] || '';
   }
 
   function setPoint(point, target) {
     const markers = RPMap.getMarkersLayer();
     if (target === 'start') {
       startPoint = point;
+      startSetAutomatically = false; // un point choisi explicitement n'est plus "automatique"
       addOrMoveMarker('start', point, '🏁 Départ', '#35D4A7');
     } else if (target === 'end') {
       endPoint = point;
@@ -102,14 +183,13 @@ const RPUi = (() => {
       L.circleMarker([point.lat, point.lon], { radius: 6, color: '#E8C15A', fillOpacity: 1 })
         .addTo(markers).bindTooltip(`Point ${waypoints.length}`);
     }
-    placingFor = null;
   }
 
   const markerRefs = {};
   function addOrMoveMarker(key, point, label, color) {
     const markers = RPMap.getMarkersLayer();
     if (markerRefs[key]) markers.removeLayer(markerRefs[key]);
-    markerRefs[key] = L.circleMarker([point.lat, point.lon], { radius: 8, color, fillOpacity: 1 })
+    markerRefs[key] = L.circleMarker([point.lat, point.lon], { radius: 8, color, fillColor: color, fillOpacity: 1 })
       .addTo(markers).bindTooltip(label, { permanent: false });
   }
 
@@ -132,7 +212,7 @@ const RPUi = (() => {
   }
 
   async function generateForCurrentMode() {
-    if (!startPoint) throw new Error('Placez un point de départ (recherche ou clic carte).');
+    if (!startPoint) throw new Error('Placez un point de départ (recherche, géolocalisation ou clic carte).');
     RPMap.clearRoute(currentMode);
     clearSegmentLabels();
 

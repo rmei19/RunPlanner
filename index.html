@@ -12,11 +12,16 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 
 <!-- Thème appliqué AVANT le premier rendu, pour éviter tout flash visuel (leçon #12) -->
+<!-- v0.2.0 : ne respecte le thème sauvegardé que si l'utilisateur l'a choisi
+     manuellement (rp_theme_manual=1) ; sinon on suit toujours le thème système,
+     pour que "sombre/clair automatique selon le système" fonctionne réellement. -->
 <script>
   (function () {
     try {
+      var manual = localStorage.getItem('rp_theme_manual') === '1';
       var saved = localStorage.getItem('rp_theme');
-      var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      var systemLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+      var theme = (manual && saved) ? saved : (systemLight ? 'light' : 'dark');
       document.documentElement.setAttribute('data-theme', theme);
     } catch (e) { /* localStorage indisponible : on garde le thème par défaut */ }
   })();
@@ -48,11 +53,26 @@
       <ul id="address-results"></ul>
     </div>
 
+    <button class="rp-btn rp-btn-locate" id="locate-me-btn">📡 Me localiser (GPS / réseau)</button>
+
+    <div class="rp-field">
+      <label for="address-search-end">Adresse d'arrivée (facultatif)</label>
+      <input id="address-search-end" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
+      <ul id="address-results-end"></ul>
+    </div>
+
+    <div class="rp-field">
+      <label for="address-search-waypoint">Point de passage (facultatif)</label>
+      <input id="address-search-waypoint" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
+      <ul id="address-results-waypoint"></ul>
+    </div>
+
     <div class="rp-point-buttons">
       <button class="rp-btn" id="set-start-btn">📍 Placer le départ</button>
       <button class="rp-btn" id="set-end-btn">🏁 Placer l'arrivée</button>
       <button class="rp-btn" id="add-waypoint-btn">➕ Point de passage</button>
     </div>
+    <p id="placing-hint" class="rp-hint"></p>
 
     <nav class="rp-tabs" role="tablist">
       <button class="rp-tab rp-tab-active" data-mode="route">Route</button>

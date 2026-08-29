@@ -197,6 +197,20 @@ body {
 }
 #address-results li:hover { background: var(--rp-surface-2); }
 
+.rp-btn-locate {
+  width: 100%;
+  border-color: var(--rp-recovery);
+  color: var(--rp-recovery);
+  font-weight: 600;
+}
+
+.rp-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--rp-text-dim);
+  font-style: italic;
+}
+
 .rp-point-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .rp-btn {
   padding: 8px 12px;
