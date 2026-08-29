@@ -68,6 +68,57 @@ const RPRouting = (() => {
     };
   }
 
+  /**
+   * Boucle "native" via l'option round_trip d'OpenRouteService : ORS choisit
+   * lui-même un itinéraire circulaire réaliste sur le réseau routier réel
+   * autour d'un point unique, au lieu de forcer un passage par des points
+   * théoriques choisis à l'aveugle (ce qui, en zone rurale/montagneuse,
+   * provoquait des allers-retours et des distances très supérieures à la
+   * cible — cf. retour terrain). Seul ORS supporte cette fonctionnalité ;
+   * sans clé ORS, on retombe sur la construction par polygone (voir loops.js).
+   */
+  async function routeRoundTrip(start, targetDistanceM, mode, seed) {
+    const key = getOrsKey();
+    if (!key) throw new Error('Aucune clé ORS disponible');
+    const profile = RP_CONFIG.routing.ors.profiles[mode] || 'foot-walking';
+    const url = `${RP_CONFIG.routing.ors.baseUrl}${profile}/geojson`;
+
+    const body = {
+      coordinates: [[start.lon, start.lat]],
+      elevation: true,
+      options: {
+        round_trip: {
+          length: targetDistanceM,
+          points: 3 + Math.floor(Math.random() * 3), // 3 à 5 : plus de points = tracé plus sinueux
+          seed: seed ?? Math.floor(Math.random() * 100000)
+        }
+      }
+    };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': key,
+        'Content-Type': 'application/json',
+        'Accept': 'application/geo+json'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(`ORS round_trip HTTP ${res.status}`);
+    const data = await res.json();
+    const feature = data.features?.[0];
+    if (!feature) throw new Error('ORS round_trip: réponse sans itinéraire');
+
+    const coords = feature.geometry.coordinates.map(c => [c[1], c[0], c[2] ?? 0]);
+    const summary = feature.properties?.summary || {};
+    return {
+      coords,
+      distanceM: summary.distance ?? rpPolylineLength(coords),
+      durationS: summary.duration ?? null,
+      source: 'ors-round-trip'
+    };
+  }
+
   async function routeWithBrouter(points, mode) {
     const profile = RP_CONFIG.routing.brouter.profiles[mode] || 'trekking';
     const lonlats = points.map(p => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`).join('|');
@@ -112,5 +163,5 @@ const RPRouting = (() => {
     return d;
   }
 
-  return { route, haversine, polylineLength: rpPolylineLength };
+  return { route, routeRoundTrip, haversine, polylineLength: rpPolylineLength };
 })();

@@ -15,6 +15,7 @@ const RPDiag = (() => {
       if (versionBadge) versionBadge.textContent = 'v' + RP_VERSION;
 
       const toggleBtn = document.getElementById('diag-toggle');
+      const header = document.getElementById('diag-header');
       const panel = document.getElementById('diag-panel');
       const copyBtn = document.getElementById('diag-copy');
       const clearBtn = document.getElementById('diag-clear');
@@ -22,8 +23,13 @@ const RPDiag = (() => {
       const isOpen = localStorage.getItem(RP_CONFIG.storageKeys.diagnosticsOpen) === '1';
       if (panel) panel.classList.toggle('rp-diag-collapsed', !isOpen);
 
-      if (toggleBtn && panel) {
-        toggleBtn.addEventListener('click', () => {
+      // Écoute sur TOUT le bandeau d'en-tête (pas seulement le petit texte
+      // "🩺 Diagnostic") : le badge de version à côté ressemble à un bouton
+      // et les utilisateurs tapent naturellement dessus aussi — avant, ce tap
+      // ne faisait rien, donnant l'impression que le panneau ne s'ouvrait pas.
+      if (header && panel) {
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', () => {
           const collapsed = panel.classList.toggle('rp-diag-collapsed');
           localStorage.setItem(RP_CONFIG.storageKeys.diagnosticsOpen, collapsed ? '0' : '1');
         });

@@ -1,11 +1,31 @@
 /**
  * loops.js — Génération géométrique des parcours (avant routage réel).
- * Construit des polygones/points théoriques, applique la correction de circuité,
- * puis délègue le routage réel à RPRouting. Détecte les allers-retours indésirables.
+ *
+ * v0.3.0 — refonte de la génération de boucle suite à un vrai défaut de
+ * conception (retour terrain : 7 km demandés → 15,28 km générés, avec
+ * aller-retours détectés). Cause : construire un polygone de points
+ * théoriques puis forcer le routeur à les relier fonctionne mal en zone
+ * rurale/montagneuse, où le réseau routier ne passe pas où l'on veut — le
+ * routeur est alors contraint de faire des allers-retours pour atteindre un
+ * point mal desservi.
+ *
+ * Corrections :
+ *  1. Priorité à l'option "round_trip" native d'OpenRouteService, qui laisse
+ *     ORS choisir lui-même un itinéraire circulaire réaliste sur le réseau
+ *     routier réel (bien plus fiable que des points choisis à l'aveugle).
+ *  2. En repli (pas de clé ORS, ou round_trip indisponible) : l'ancienne
+ *     construction par polygone est conservée, mais avec CORRECTION
+ *     ITÉRATIVE — si la distance obtenue s'écarte trop de la cible, le rayon
+ *     est automatiquement recalculé au prorata pour la tentative suivante,
+ *     au lieu de dépendre d'un facteur de circuité fixe forcément approximatif.
+ *  3. Jusqu'à 3 tentatives sont générées et la MEILLEURE est retenue (le
+ *     moins de chevauchement, puis l'écart de distance le plus faible),
+ *     au lieu de renvoyer telle quelle la première tentative même mauvaise.
  */
 
 const RPLoops = (() => {
   const CIRCUITY = RP_CONFIG.routing.circuityFactor;
+  const MAX_ATTEMPTS = 3;
 
   /** Déplace un point de `distanceM` mètres dans la direction `bearingDeg` (0=Nord). */
   function destinationPoint(lat, lon, bearingDeg, distanceM) {
@@ -21,37 +41,99 @@ const RPLoops = (() => {
     return { lat: φ2 * 180 / Math.PI, lon: λ2 * 180 / Math.PI };
   }
 
-  /**
-   * Génère une boucle théorique polygonale autour d'un point de départ,
-   * dont le périmètre à vol d'oiseau vise targetDistanceM / CIRCUITY.
-   */
-  function theoreticalLoopPoints(start, targetDistanceM, vertices = 6, seedBearing = 0) {
+  /** Génère une boucle théorique polygonale autour d'un point de départ. */
+  function theoreticalLoopPoints(start, targetDistanceM, vertices, seedBearing) {
     const perimeterTarget = targetDistanceM / CIRCUITY;
-    const radius = perimeterTarget / (2 * Math.PI); // approx cercle -> rayon
+    const radius = perimeterTarget / (2 * Math.PI);
     const pts = [];
     for (let i = 0; i < vertices; i++) {
       const bearing = seedBearing + (360 / vertices) * i + (Math.random() * 20 - 10);
-      const r = radius * (0.85 + Math.random() * 0.3); // irrégularité naturelle
+      const r = radius * (0.85 + Math.random() * 0.3);
       pts.push(destinationPoint(start.lat, start.lon, bearing, r));
     }
-    pts.push({ ...start });
-    return [start, ...pts];
+    return [start, ...pts, { ...start }];
   }
 
-  /** Boucle simple (polygone régulier) à partir d'un point et d'une distance cible. */
+  /** Score de qualité d'une tentative : plus bas = meilleur. Le chevauchement pèse le plus lourd. */
+  function scoreAttempt(r) {
+    return (r.overlapRatio || 0) * 200 + Math.abs(r.deltaPct || 0);
+  }
+
+  function annotate(result, targetDistanceM) {
+    result.targetDistanceM = targetDistanceM;
+    result.deltaPct = targetDistanceM
+      ? Math.round(((result.distanceM - targetDistanceM) / targetDistanceM) * 100)
+      : null;
+    return result;
+  }
+
+  async function tryRoundTrip(start, targetDistanceM, mode, seed) {
+    const result = await RPRouting.routeRoundTrip(start, targetDistanceM, mode, seed);
+    return annotate(validateAndFlag(result), targetDistanceM);
+  }
+
+  /** state.scale est ajusté d'une tentative à l'autre pour converger vers la distance cible. */
+  async function tryPolygon(start, targetDistanceM, mode, vertices, seedBearing, state) {
+    const pts = theoreticalLoopPoints(start, targetDistanceM * state.scale, vertices, seedBearing);
+    const result = await RPRouting.route(pts, mode);
+    const validated = annotate(validateAndFlag(result), targetDistanceM);
+    if (targetDistanceM > 0 && validated.distanceM > 0 && Math.abs(validated.deltaPct) > 12) {
+      // Correction proportionnelle pour la prochaine tentative (converge en 2-3 essais).
+      state.scale *= targetDistanceM / validated.distanceM;
+    }
+    return validated;
+  }
+
+  /** Génère plusieurs tentatives (ORS round-trip puis repli polygone) et garde la meilleure. */
+  async function bestOfAttempts(start, targetDistanceM, mode, vertices, randomizeBearing) {
+    const attempts = [];
+    const polygonState = { scale: 1 };
+    const baseSeedBearing = randomizeBearing ? Math.random() * 360 : 0;
+
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      let attempt = null;
+      try {
+        attempt = await tryRoundTrip(start, targetDistanceM, mode, Date.now() % 100000 + i);
+      } catch (e) {
+        RPDiag.log('info', `Boucle native ORS indisponible (${e.message}), repli sur construction polygonale.`);
+      }
+      if (!attempt) {
+        try {
+          const v = vertices || (5 + Math.floor(Math.random() * 4));
+          attempt = await tryPolygon(start, targetDistanceM, mode, v, baseSeedBearing + i * 41, polygonState);
+        } catch (e) {
+          RPDiag.log('warn', `Tentative de boucle ${i + 1} échouée: ${e.message}`);
+        }
+      }
+      if (attempt) {
+        attempts.push(attempt);
+        if (!attempt.hasSignificantOverlap && Math.abs(attempt.deltaPct) <= 15) break; // assez bon, on arrête
+      }
+    }
+
+    if (attempts.length === 0) throw new Error('Impossible de générer une boucle : aucun itinéraire obtenu après plusieurs tentatives.');
+    attempts.sort((a, b) => scoreAttempt(a) - scoreAttempt(b));
+    const best = attempts[0];
+    if (attempts.length > 1) {
+      RPDiag.log('info', `${attempts.length} tentative(s) générée(s), la meilleure retenue (${best.source}, écart ${best.deltaPct}% vs cible).`);
+    }
+    if (best.hasSignificantOverlap) {
+      RPDiag.log('warn', 'Toutes les tentatives contiennent un chevauchement ; le réseau routier local est probablement peu maillé ici.');
+    }
+    return best;
+  }
+
+  /** Boucle simple. */
   async function generateLoop(start, targetDistanceM, mode) {
-    const pts = theoreticalLoopPoints(start, targetDistanceM, 6, 0);
-    return finalizeAndValidate(pts, mode, targetDistanceM);
+    return bestOfAttempts(start, targetDistanceM, mode, 6, false);
   }
 
-  /** Boucle aléatoire : bearing de départ et irrégularité randomisés à chaque appel. */
+  /** Boucle aléatoire : bearing de départ et nombre de sommets randomisés. */
   async function generateRandomLoop(start, targetDistanceM, mode) {
-    const vertices = 5 + Math.floor(Math.random() * 4); // 5 à 8
-    const pts = theoreticalLoopPoints(start, targetDistanceM, vertices, Math.random() * 360);
-    return finalizeAndValidate(pts, mode, targetDistanceM);
+    return bestOfAttempts(start, targetDistanceM, mode, null, true);
   }
 
-  /** Aller-retour simple sur un cap donné (ou aléatoire). */
+  /** Aller-retour simple sur un cap donné (ou aléatoire) — l'aller-retour est ICI volontaire. */
   async function generateOutAndBack(start, targetDistanceM, mode, bearingDeg = null) {
     const bearing = bearingDeg ?? Math.random() * 360;
     const turnaround = destinationPoint(start.lat, start.lon, bearing, targetDistanceM / 2);
@@ -65,7 +147,6 @@ const RPLoops = (() => {
     if (!targetDistanceM || direct.distanceM >= targetDistanceM * 0.95) {
       return { ...direct, kind: 'a-vers-b' };
     }
-    // Insère un détour : point excentré à mi-chemin, perpendiculaire à l'axe direct.
     const mid = { lat: (start.lat + end.lat) / 2, lon: (start.lon + end.lon) / 2 };
     const bearingDirect = bearingBetween(start, end);
     const remainingM = targetDistanceM - direct.distanceM;
@@ -90,24 +171,11 @@ const RPLoops = (() => {
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
   }
 
-  async function finalizeAndValidate(theoreticalPts, mode, targetDistanceM) {
-    const result = await RPRouting.route(theoreticalPts, mode);
-    const validated = validateAndFlag(result);
-    validated.targetDistanceM = targetDistanceM;
-    validated.deltaPct = targetDistanceM
-      ? Math.round(((validated.distanceM - targetDistanceM) / targetDistanceM) * 100)
-      : null;
-    return validated;
-  }
-
   /**
-   * Détecte les allers-retours (leçon #4) : à la fois le taux de chevauchement
-   * global de l'itinéraire ET les portions localisées (quelques centaines de mètres
-   * qui repassent sur elles-mêmes) qui passeraient inaperçues dans une moyenne globale.
+   * Détecte les allers-retours (leçon #4) : chevauchement global ET local.
    */
   function validateAndFlag(result) {
     const coords = result.coords;
-    const segLen = 25; // résolution d'échantillonnage en mètres, pour détecter le local
     const visited = [];
     let overlapM = 0;
     let localOverlapFlags = 0;
@@ -132,9 +200,6 @@ const RPLoops = (() => {
     const overlapRatio = result.distanceM > 0 ? overlapM / result.distanceM : 0;
     result.overlapRatio = overlapRatio;
     result.hasSignificantOverlap = overlapRatio > 0.15 || localOverlapFlags > 3;
-    if (result.hasSignificantOverlap) {
-      RPDiag.log('warn', `Chevauchement détecté sur l'itinéraire (${Math.round(overlapRatio * 100)}%).`);
-    }
     return result;
   }
 

@@ -323,7 +323,10 @@ const RPUi = (() => {
     for (let i = 1; i < coords.length; i++) {
       cum += RPRouting.haversine({ lat: coords[i - 1][0], lon: coords[i - 1][1] }, { lat: coords[i][0], lon: coords[i][1] });
       if (cum >= nextKm * 1000) {
-        renderSplitLabel(coords[i], `${nextKm} km`, '#F4F1E8', true);
+        // 'var(--rp-text)' plutôt qu'une couleur fixe : sans ça, en thème clair,
+        // le texte quasi-blanc devenait illisible sur le fond clair de l'étiquette
+        // (bug observé : étiquettes "3 km" quasiment invisibles).
+        renderSplitLabel(coords[i], `${nextKm} km`, 'var(--rp-text)', true);
         nextKm++;
       }
     }
