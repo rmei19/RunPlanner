@@ -25,7 +25,7 @@
 
 const RPLoops = (() => {
   const CIRCUITY = RP_CONFIG.routing.circuityFactor;
-  const MAX_ATTEMPTS = 3;
+  const MAX_ATTEMPTS = 4;
 
   /** Déplace un point de `distanceM` mètres dans la direction `bearingDeg` (0=Nord). */
   function destinationPoint(lat, lon, bearingDeg, distanceM) {
@@ -41,16 +41,29 @@ const RPLoops = (() => {
     return { lat: φ2 * 180 / Math.PI, lon: λ2 * 180 / Math.PI };
   }
 
-  /** Génère une boucle théorique polygonale autour d'un point de départ. */
-  function theoreticalLoopPoints(start, targetDistanceM, vertices, seedBearing) {
-    const perimeterTarget = targetDistanceM / CIRCUITY;
-    const radius = perimeterTarget / (2 * Math.PI);
-    const pts = [];
+  /**
+   * Construit une "forme" de boucle fixe (angles relatifs + irrégularité par
+   * sommet), tirée UNE SEULE FOIS. C'est essentiel pour que la correction
+   * itérative fonctionne : avant, chaque tentative de correction régénérait
+   * une forme totalement aléatoire différente (nouveaux angles ET nouvelle
+   * irrégularité à chaque appel), donc ajuster le rayon n'avait aucune prise
+   * réelle sur la distance obtenue — d'où des écarts erratiques et non
+   * convergents (-73% puis +105% sur la même cible, par exemple).
+   */
+  function makeShape(vertices, seedBearing) {
+    const shape = [];
     for (let i = 0; i < vertices; i++) {
-      const bearing = seedBearing + (360 / vertices) * i + (Math.random() * 20 - 10);
-      const r = radius * (0.85 + Math.random() * 0.3);
-      pts.push(destinationPoint(start.lat, start.lon, bearing, r));
+      shape.push({
+        bearing: seedBearing + (360 / vertices) * i + (Math.random() * 20 - 10),
+        factor: 0.85 + Math.random() * 0.3
+      });
     }
+    return shape;
+  }
+
+  /** Projette la forme fixe à un rayon donné (mètres) autour du départ. */
+  function pointsFromShape(start, shape, radius) {
+    const pts = shape.map(s => destinationPoint(start.lat, start.lon, s.bearing, radius * s.factor));
     return [start, ...pts, { ...start }];
   }
 
@@ -72,35 +85,48 @@ const RPLoops = (() => {
     return annotate(validateAndFlag(result), targetDistanceM);
   }
 
-  /** state.scale est ajusté d'une tentative à l'autre pour converger vers la distance cible. */
-  async function tryPolygon(start, targetDistanceM, mode, vertices, seedBearing, state) {
-    const pts = theoreticalLoopPoints(start, targetDistanceM * state.scale, vertices, seedBearing);
+  /**
+   * state.radius est corrigé d'une tentative à l'autre en fonction de l'écart
+   * mesuré, TOUJOURS sur la même forme (voir makeShape) — c'est ce qui rend
+   * la convergence possible. La correction est amortie (exposant 0.7 plutôt
+   * que 1) pour éviter les oscillations en terrain irrégulier, où la relation
+   * rayon → distance réelle n'est jamais parfaitement linéaire.
+   */
+  async function tryPolygon(start, targetDistanceM, mode, shape, state) {
+    const pts = pointsFromShape(start, shape, state.radius);
     const result = await RPRouting.route(pts, mode);
     const validated = annotate(validateAndFlag(result), targetDistanceM);
-    if (targetDistanceM > 0 && validated.distanceM > 0 && Math.abs(validated.deltaPct) > 12) {
-      // Correction proportionnelle pour la prochaine tentative (converge en 2-3 essais).
-      state.scale *= targetDistanceM / validated.distanceM;
+    RPDiag.log('info', `Tentative boucle : rayon ${Math.round(state.radius)} m → ${(validated.distanceM / 1000).toFixed(2)} km (écart ${validated.deltaPct}%).`);
+    if (targetDistanceM > 0 && validated.distanceM > 0 && Math.abs(validated.deltaPct) > 10) {
+      const ratio = targetDistanceM / validated.distanceM;
+      state.radius *= Math.pow(ratio, 0.7); // correction amortie, converge sans osciller
     }
     return validated;
   }
 
   /** Génère plusieurs tentatives (ORS round-trip puis repli polygone) et garde la meilleure. */
-  async function bestOfAttempts(start, targetDistanceM, mode, vertices, randomizeBearing) {
+  async function bestOfAttempts(start, targetDistanceM, mode, fixedVertices, randomizeBearing) {
     const attempts = [];
-    const polygonState = { scale: 1 };
-    const baseSeedBearing = randomizeBearing ? Math.random() * 360 : 0;
+    const vertices = fixedVertices || (5 + Math.floor(Math.random() * 4)); // fixé une fois pour tout l'appel
+    const seedBearing = randomizeBearing ? Math.random() * 360 : 0;
+    const shape = makeShape(vertices, seedBearing);
+    const initialRadius = (targetDistanceM / CIRCUITY) / (2 * Math.PI);
+    const polygonState = { radius: initialRadius };
+    let orsAvailable = true;
 
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       let attempt = null;
-      try {
-        attempt = await tryRoundTrip(start, targetDistanceM, mode, Date.now() % 100000 + i);
-      } catch (e) {
-        RPDiag.log('info', `Boucle native ORS indisponible (${e.message}), repli sur construction polygonale.`);
+      if (orsAvailable) {
+        try {
+          attempt = await tryRoundTrip(start, targetDistanceM, mode, Date.now() % 100000 + i);
+        } catch (e) {
+          orsAvailable = false; // inutile de retenter ORS aux tours suivants (pas de clé / échec net)
+          RPDiag.log('info', `Boucle native ORS indisponible (${e.message}), repli sur construction polygonale.`);
+        }
       }
       if (!attempt) {
         try {
-          const v = vertices || (5 + Math.floor(Math.random() * 4));
-          attempt = await tryPolygon(start, targetDistanceM, mode, v, baseSeedBearing + i * 41, polygonState);
+          attempt = await tryPolygon(start, targetDistanceM, mode, shape, polygonState);
         } catch (e) {
           RPDiag.log('warn', `Tentative de boucle ${i + 1} échouée: ${e.message}`);
         }
