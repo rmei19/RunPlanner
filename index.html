@@ -38,6 +38,7 @@
 
 <header id="rp-topbar">
   <h1 id="rp-logo">Run<span>Planner</span></h1>
+  <button id="settings-btn" aria-label="Réglages">⚙️</button>
   <button id="theme-toggle" aria-label="Changer de thème">🌓</button>
 </header>
 
@@ -68,6 +69,7 @@
       <label for="address-search-waypoint">Point de passage (facultatif)</label>
       <input id="address-search-waypoint" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
       <ul id="address-results-waypoint"></ul>
+      <ul id="waypoint-chips" class="rp-chip-list"></ul>
     </div>
 
     <div class="rp-point-buttons">
@@ -179,6 +181,26 @@
   </aside>
 </main>
 
+<!-- Panneau de réglages (clé API OpenRouteService, etc.) -->
+<div id="settings-modal" class="rp-modal-backdrop" hidden>
+  <div class="rp-modal" role="dialog" aria-label="Réglages">
+    <div class="rp-modal-header">
+      <h2>Réglages</h2>
+      <button id="settings-close" type="button" aria-label="Fermer">✕</button>
+    </div>
+    <div class="rp-field">
+      <label for="settings-ors-key">Clé API OpenRouteService (facultatif)</label>
+      <input id="settings-ors-key" type="text" placeholder="Collez votre clé ORS…" autocomplete="off">
+    </div>
+    <p id="settings-status" class="rp-hint"></p>
+    <p class="rp-hint">Sans clé, RunPlanner route automatiquement via BRouter (gratuit, sans compte). Une clé ORS gratuite s'obtient sur <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a> et permet en plus les boucles "round trip" natives, plus fiables sur route réelle.</p>
+    <div class="rp-export-row">
+      <button class="rp-btn rp-btn-primary" id="settings-save" type="button">Enregistrer</button>
+      <button class="rp-btn" id="settings-clear" type="button">Effacer la clé</button>
+    </div>
+  </div>
+</div>
+
 <!-- Panneau de diagnostic (leçon #10) -->
 <div id="diag-panel" class="rp-diag-collapsed">
   <div id="diag-header">
@@ -204,6 +226,7 @@
 <script src="js/citytour.js"></script>
 <script src="js/export.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/settings.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -10,6 +10,7 @@
     { name: 'thème (bascule interactive)', run: () => RPTheme.init() },
     { name: 'carte', run: () => RPMap.init('map') },
     { name: 'interface', run: () => RPUi.init() },
+    { name: 'réglages', run: () => RPSettings.init() },
     { name: 'service worker', run: () => registerServiceWorker() },
   ];
 

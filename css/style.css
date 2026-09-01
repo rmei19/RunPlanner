@@ -71,8 +71,17 @@ body {
 }
 #rp-logo span { color: var(--rp-text); }
 
-#theme-toggle {
+#settings-btn {
   margin-left: auto;
+  background: none;
+  border: 1px solid var(--rp-line);
+  color: var(--rp-text);
+  border-radius: 999px;
+  width: 36px; height: 36px;
+  cursor: pointer;
+}
+
+#theme-toggle {
   background: none;
   border: 1px solid var(--rp-line);
   color: var(--rp-text);
@@ -262,6 +271,82 @@ body {
 
 .rp-export-row { display: flex; gap: 8px; }
 
+/* ---------- Liste persistante des points de passage ---------- */
+.rp-chip-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rp-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--rp-surface-2);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.rp-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-chip-remove {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--rp-line);
+  color: var(--rp-effort);
+  border-radius: 999px;
+  width: 24px; height: 24px;
+  min-width: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* ---------- Panneau de réglages ---------- */
+.rp-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.rp-modal {
+  background: var(--rp-surface);
+  color: var(--rp-text);
+  border-radius: var(--rp-radius);
+  padding: 20px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rp-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rp-modal-header h2 {
+  font-family: var(--rp-font-display);
+  font-size: 22px;
+  margin: 0;
+}
+.rp-modal-header button {
+  background: none;
+  border: none;
+  color: var(--rp-text);
+  font-size: 18px;
+  cursor: pointer;
+}
+.rp-modal a { color: var(--rp-recovery); }
+
 #poi-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13px; max-height: 140px; overflow-y: auto; }
 #poi-list li { padding: 6px 0; border-bottom: 1px solid var(--rp-line); }
 
@@ -281,6 +366,15 @@ body {
   box-shadow: 1px 2px 0 var(--rp-shadow);
 }
 .rp-bib-km span { transform: rotate(2deg); opacity: 0.9; }
+
+/* ---------- Panneau de diagnostic ---------- */
+/* ---------- Contrôles Leaflet (zoom, attribution) ---------- */
+/* La barre de diagnostic (fixe, pleine largeur, en bas de l'écran) recouvrait
+   le bouton "−" de zoom situé lui aussi en bas à droite. On remonte les
+   contrôles Leaflet de la hauteur du bandeau de diagnostic replié. */
+.leaflet-bottom {
+  bottom: 44px !important;
+}
 
 /* ---------- Panneau de diagnostic ---------- */
 #diag-panel {
@@ -372,6 +466,13 @@ body {
     padding: 10px 0 14px;
     margin: -16px 0 4px;
     -webkit-tap-highlight-color: transparent;
+    /* Reste visible et tappable en toutes circonstances, même quand le
+       contenu du volet défile en-dessous (bug : la poignée défilait avec
+       le reste et disparaissait du haut de la fenêtre). */
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--rp-surface);
   }
   .rp-handle-bar {
     width: 40px;

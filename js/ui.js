@@ -23,7 +23,7 @@ const RPUi = (() => {
   let currentMode = 'route'; // route | chemins | exercices
   let startPoint = null;
   let endPoint = null;
-  let waypoints = [];
+  let waypoints = []; // [{ point:{lat,lon}, marker, label }]
   let lastResult = null;
   let lastSegments = null;
   let placingFor = 'start'; // 'start' | 'end' | 'waypoint' — mode actif pour le clic carte
@@ -103,10 +103,17 @@ const RPUi = (() => {
           const li = document.createElement('li');
           li.textContent = m.label;
           li.addEventListener('click', () => {
-            setPoint({ lat: m.lat, lon: m.lon }, target);
-            input.value = m.label;
+            if (target === 'waypoint') {
+              addWaypoint({ lat: m.lat, lon: m.lon }, m.label);
+              input.value = ''; // champ réutilisable pour ajouter plusieurs points ; la liste
+                                 // ci-dessous (rendered par renderWaypointChips) confirme l'ajout
+                                 // — avant, vider le champ sans autre confirmation donnait
+                                 // l'impression que le point de passage avait disparu.
+            } else {
+              setPoint({ lat: m.lat, lon: m.lon }, target);
+              input.value = m.label;
+            }
             results.innerHTML = '';
-            if (target === 'waypoint') input.value = ''; // champ réutilisable pour ajouter plusieurs points
           });
           results.appendChild(li);
         });
@@ -140,17 +147,31 @@ const RPUi = (() => {
   function initMapClickHandling() {
     const map = RPMap.getMap();
     if (!map) throw new Error('Carte non initialisée : impossible de gérer les clics.');
+
     map.on('click', (e) => {
-      setPoint({ lat: e.latlng.lat, lon: e.latlng.lng }, placingFor);
+      const point = { lat: e.latlng.lat, lon: e.latlng.lng };
+      if (placingFor === 'waypoint') {
+        handleWaypointClick(point); // ajoute, ou retire si un point existe déjà à cet endroit
+      } else {
+        setPoint(point, placingFor);
+      }
       // Le mode "départ" reste l'action par défaut après chaque clic ; les
       // modes "arrivée" et "point de passage" ne s'appliquent qu'au clic
       // suivant (déclenchés explicitement par les boutons ci-dessous), pour
-      // éviter qu'un simple clic supplémentaire n'ajoute silencieusement des
-      // points de passage non voulus.
+      // éviter qu'un simple clic supplémentaire ne modifie un point non voulu.
       if (placingFor !== 'start') {
         placingFor = 'start';
         updatePlacingHint();
       }
+    });
+
+    // Clic long (mobile) / clic droit (desktop) — Leaflet transforme les deux
+    // en un même événement 'contextmenu', et empêche déjà le menu contextuel
+    // natif du navigateur sur la carte. C'est le geste dédié pour AJOUTER ou
+    // RETIRER un point de passage, sans devoir d'abord presser le bouton.
+    map.on('contextmenu', (e) => {
+      const point = { lat: e.latlng.lat, lon: e.latlng.lng };
+      handleWaypointClick(point);
     });
   }
 
@@ -164,7 +185,7 @@ const RPUi = (() => {
     const hint = document.getElementById('placing-hint');
     if (!hint) return;
     const labels = {
-      start: 'Cliquez sur la carte pour placer le départ 🏁',
+      start: 'Cliquez sur la carte pour placer le départ 🏁 (clic long : point de passage)',
       end: 'Cliquez sur la carte pour placer l\'arrivée 🏁',
       waypoint: 'Cliquez sur la carte pour ajouter un point de passage ➕'
     };
@@ -172,7 +193,6 @@ const RPUi = (() => {
   }
 
   function setPoint(point, target) {
-    const markers = RPMap.getMarkersLayer();
     if (target === 'start') {
       startPoint = point;
       startSetAutomatically = false; // un point choisi explicitement n'est plus "automatique"
@@ -181,10 +201,92 @@ const RPUi = (() => {
       endPoint = point;
       addOrMoveMarker('end', point, '🏁 Arrivée', '#FF5A3C');
     } else {
-      waypoints.push(point);
-      L.circleMarker([point.lat, point.lon], { radius: 6, color: '#E8C15A', fillOpacity: 1 })
-        .addTo(markers).bindTooltip(`Point ${waypoints.length}`);
+      addWaypoint(point, null);
     }
+  }
+
+  // ---------- Points de passage : ajout, retrait, affichage persistant ----------
+  const WAYPOINT_REMOVE_RADIUS_M = 35;
+
+  /** Clic (bouton "Point de passage" puis clic carte) ou clic long : ajoute,
+   *  ou retire s'il y a déjà un point de passage à cet endroit. */
+  function handleWaypointClick(point) {
+    if (tryRemoveWaypointNear(point)) {
+      RPDiag.log('info', 'Point de passage retiré.');
+    } else {
+      addWaypoint(point, null);
+    }
+  }
+
+  function addWaypoint(point, label) {
+    const markers = RPMap.getMarkersLayer();
+    const marker = L.circleMarker([point.lat, point.lon], { radius: 7, color: '#E8C15A', fillColor: '#E8C15A', fillOpacity: 1 })
+      .addTo(markers).bindTooltip(`Point ${waypoints.length + 1}`);
+    const entry = { point, marker, label: label || '…' };
+    waypoints.push(entry);
+    renderWaypointChips();
+    RPDiag.log('info', `Point de passage ajouté (total : ${waypoints.length}).`);
+
+    if (!label) {
+      // Pas d'adresse connue (ajout via carte / clic long) : on la retrouve
+      // en arrière-plan pour un affichage plus lisible dans la liste.
+      RPGeocoder.reverse(point.lat, point.lon).then(addr => {
+        entry.label = addr;
+        renderWaypointChips();
+      });
+    }
+  }
+
+  function tryRemoveWaypointNear(point) {
+    for (let i = 0; i < waypoints.length; i++) {
+      const d = RPRouting.haversine(point, waypoints[i].point);
+      if (d <= WAYPOINT_REMOVE_RADIUS_M) {
+        RPMap.getMarkersLayer().removeLayer(waypoints[i].marker);
+        waypoints.splice(i, 1);
+        renumberWaypoints();
+        renderWaypointChips();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function removeWaypointAt(index) {
+    const entry = waypoints[index];
+    if (!entry) return;
+    RPMap.getMarkersLayer().removeLayer(entry.marker);
+    waypoints.splice(index, 1);
+    renumberWaypoints();
+    renderWaypointChips();
+    RPDiag.log('info', 'Point de passage retiré.');
+  }
+
+  function renumberWaypoints() {
+    waypoints.forEach((w, idx) => w.marker.setTooltipContent(`Point ${idx + 1}`));
+  }
+
+  /** Liste persistante des points de passage sous le champ de recherche —
+   *  donne une confirmation visuelle claire (le champ de recherche, lui,
+   *  se vide après chaque ajout pour permettre d'en saisir un autre). */
+  function renderWaypointChips() {
+    const list = document.getElementById('waypoint-chips');
+    if (!list) return;
+    list.innerHTML = '';
+    waypoints.forEach((w, idx) => {
+      const li = document.createElement('li');
+      li.className = 'rp-chip';
+      const text = document.createElement('span');
+      text.textContent = `${idx + 1}. ${w.label}`;
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'rp-chip-remove';
+      removeBtn.setAttribute('aria-label', `Retirer le point ${idx + 1}`);
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', () => removeWaypointAt(idx));
+      li.appendChild(text);
+      li.appendChild(removeBtn);
+      list.appendChild(li);
+    });
   }
 
   const markerRefs = {};
@@ -236,7 +338,7 @@ const RPUi = (() => {
       result = await RPLoops.generatePointToPoint(startPoint, endPoint, targetM, currentMode);
     } else if (subMode === 'points-de-passage') {
       if (waypoints.length < 1) throw new Error('Ajoutez au moins un point de passage.');
-      result = await RPLoops.generateWaypointLoop([startPoint, ...waypoints], currentMode);
+      result = await RPLoops.generateWaypointLoop([startPoint, ...waypoints.map(w => w.point)], currentMode);
     } else if (subMode === 'visite-citadine') {
       const pois = await RPCityTour.findPois(startPoint.lat, startPoint.lon, 2000);
       renderPoiList(pois);
