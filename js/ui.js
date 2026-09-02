@@ -63,9 +63,24 @@ const RPUi = (() => {
         document.querySelectorAll('.rp-mode-panel').forEach(p => {
           p.hidden = p.dataset.forMode !== currentMode;
         });
+        // Les tracés des autres modes restaient affichés en même temps sur
+        // la carte (chaque mode a son propre calque, jamais nettoyé par les
+        // autres), créant un empilement confus de tracés et d'étiquettes.
+        // On repart d'une carte propre à chaque changement d'onglet.
+        RPMap.clearAllRoutes();
+        resetResultDisplay();
         RPDiag.log('info', `Mode sélectionné : ${currentMode}`);
       });
     });
+  }
+
+  function resetResultDisplay() {
+    lastResult = null;
+    lastSegments = null;
+    const summary = document.getElementById('result-summary');
+    if (summary) summary.hidden = true;
+    const elevation = document.getElementById('elevation-profile');
+    if (elevation) elevation.hidden = true;
   }
 
   // ---------- Panneau mobile coulissant ----------
@@ -167,12 +182,47 @@ const RPUi = (() => {
 
     // Clic long (mobile) / clic droit (desktop) — Leaflet transforme les deux
     // en un même événement 'contextmenu', et empêche déjà le menu contextuel
-    // natif du navigateur sur la carte. C'est le geste dédié pour AJOUTER ou
-    // RETIRER un point de passage, sans devoir d'abord presser le bouton.
+    // natif du navigateur sur la carte. Ouvre un choix explicite (au lieu de
+    // basculer directement un point de passage) : Départ / Arrivée / Point
+    // de passage — et Retirer si un point de passage existe déjà ici.
     map.on('contextmenu', (e) => {
       const point = { lat: e.latlng.lat, lon: e.latlng.lng };
-      handleWaypointClick(point);
+      showContextMenu(point, e.latlng);
     });
+  }
+
+  /** Petit menu contextuel (popup Leaflet) proposant Départ / Arrivée / Point de passage. */
+  function showContextMenu(point, latlng) {
+    const map = RPMap.getMap();
+    const existingIdx = findWaypointIndexNear(point);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'rp-context-menu';
+
+    const options = [
+      { label: '📍 Départ', action: () => setPoint(point, 'start') },
+      { label: '🏁 Arrivée', action: () => setPoint(point, 'end') },
+      { label: '➕ Point de passage', action: () => addWaypoint(point, null) }
+    ];
+    if (existingIdx !== -1) {
+      options.push({ label: '✕ Retirer ce point de passage', action: () => removeWaypointAt(existingIdx) });
+    }
+
+    options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = opt.label;
+      btn.addEventListener('click', () => {
+        opt.action();
+        map.closePopup();
+      });
+      wrap.appendChild(btn);
+    });
+
+    L.popup({ closeButton: true, className: 'rp-context-popup', minWidth: 180 })
+      .setLatLng(latlng)
+      .setContent(wrap)
+      .openOn(map);
   }
 
   function initPointButtons() {
@@ -237,18 +287,21 @@ const RPUi = (() => {
     }
   }
 
-  function tryRemoveWaypointNear(point) {
+  function findWaypointIndexNear(point) {
     for (let i = 0; i < waypoints.length; i++) {
-      const d = RPRouting.haversine(point, waypoints[i].point);
-      if (d <= WAYPOINT_REMOVE_RADIUS_M) {
-        RPMap.getMarkersLayer().removeLayer(waypoints[i].marker);
-        waypoints.splice(i, 1);
-        renumberWaypoints();
-        renderWaypointChips();
-        return true;
-      }
+      if (RPRouting.haversine(point, waypoints[i].point) <= WAYPOINT_REMOVE_RADIUS_M) return i;
     }
-    return false;
+    return -1;
+  }
+
+  function tryRemoveWaypointNear(point) {
+    const i = findWaypointIndexNear(point);
+    if (i === -1) return false;
+    RPMap.getMarkersLayer().removeLayer(waypoints[i].marker);
+    waypoints.splice(i, 1);
+    renumberWaypoints();
+    renderWaypointChips();
+    return true;
   }
 
   function removeWaypointAt(index) {
@@ -414,9 +467,10 @@ const RPUi = (() => {
     }
 
     if (result.hasSignificantOverlap) {
-      L.popup().setLatLng(latlngs[0]).setContent(
-        '⚠️ Cet itinéraire contient une portion en aller-retour non désiré. Essayez de régénérer.'
-      ).openOn(RPMap.getMap());
+      // Le message n'est plus affiché à l'écran (gênant à l'usage) ; la
+      // détection reste active en arrière-plan pour choisir la meilleure
+      // tentative (voir loops.js) et reste tracée dans le diagnostic.
+      RPDiag.log('warn', 'Chevauchement résiduel sur le tracé retenu.');
     }
 
     RPMap.fitToLayer(currentMode);
@@ -489,6 +543,66 @@ const RPUi = (() => {
         ${result.deltaPct != null ? `<span class="rp-summary-delta">${result.deltaPct > 0 ? '+' : ''}${result.deltaPct}% vs cible</span>` : ''}
       </div>`;
     el.hidden = false;
+    renderElevationProfile(result.coords);
+  }
+
+  // ---------- Profil de dénivelé ----------
+  /** Élévation lissée (m) au fil de la distance (km), + dénivelé positif/négatif cumulé. */
+  function computeElevationProfile(coords) {
+    if (!coords || coords.length < 2) return null;
+    const points = [];
+    let cumM = 0;
+    points.push({ d: 0, ele: coords[0][2] || 0 });
+    for (let i = 1; i < coords.length; i++) {
+      cumM += RPRouting.haversine({ lat: coords[i - 1][0], lon: coords[i - 1][1] }, { lat: coords[i][0], lon: coords[i][1] });
+      points.push({ d: cumM / 1000, ele: coords[i][2] || 0 });
+    }
+    const allZero = points.every(p => p.ele === 0);
+    if (allZero) return null; // pas de données d'altitude fournies par le routeur
+
+    // Dénivelé cumulé avec seuil anti-bruit (évite de compter chaque micro-
+    // variation GPS comme une montée/descente).
+    const THRESHOLD_M = 2;
+    let gain = 0, loss = 0, last = points[0].ele;
+    for (const p of points) {
+      const diff = p.ele - last;
+      if (Math.abs(diff) >= THRESHOLD_M) {
+        if (diff > 0) gain += diff; else loss += -diff;
+        last = p.ele;
+      }
+    }
+    return { points, gain: Math.round(gain), loss: Math.round(loss) };
+  }
+
+  function renderElevationProfile(coords) {
+    const container = document.getElementById('elevation-profile');
+    const svgHost = document.getElementById('elevation-svg-container');
+    const stats = document.getElementById('elevation-stats');
+    if (!container || !svgHost) return;
+
+    const profile = computeElevationProfile(coords);
+    if (!profile) { container.hidden = true; return; }
+
+    const { points, gain, loss } = profile;
+    const W = 300, H = 90, PAD = 4;
+    const maxD = points[points.length - 1].d || 1;
+    const eles = points.map(p => p.ele);
+    let minE = Math.min(...eles), maxE = Math.max(...eles);
+    if (maxE - minE < 10) { const mid = (maxE + minE) / 2; minE = mid - 5; maxE = mid + 5; } // évite un graphe plat écrasé
+
+    const x = d => PAD + (d / maxD) * (W - 2 * PAD);
+    const y = ele => H - PAD - ((ele - minE) / (maxE - minE)) * (H - 2 * PAD);
+
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.d).toFixed(1)},${y(p.ele).toFixed(1)}`).join(' ');
+    const areaPath = `${linePath} L${x(points[points.length - 1].d).toFixed(1)},${H - PAD} L${x(0).toFixed(1)},${H - PAD} Z`;
+
+    svgHost.innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" role="img" aria-label="Profil de dénivelé">
+        <path d="${areaPath}" fill="var(--rp-recovery)" opacity="0.18"></path>
+        <path d="${linePath}" fill="none" stroke="var(--rp-recovery)" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+      </svg>`;
+    if (stats) stats.textContent = `D+ ${gain} m · D- ${loss} m · alt. ${Math.round(minE)}–${Math.round(maxE)} m`;
+    container.hidden = false;
   }
 
   function formatDuration(seconds) {

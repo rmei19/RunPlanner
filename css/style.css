@@ -269,6 +269,13 @@ body {
 .rp-summary-delta { font-size: 12px; color: var(--rp-route-accent); }
 .rp-error { color: var(--rp-effort); font-size: 13px; }
 
+.rp-elevation {
+  background: var(--rp-surface-2);
+  border-radius: var(--rp-radius);
+  padding: 10px 12px;
+}
+.rp-elevation svg { display: block; }
+
 .rp-export-row { display: flex; gap: 8px; }
 
 /* ---------- Liste persistante des points de passage ---------- */
@@ -346,6 +353,30 @@ body {
   cursor: pointer;
 }
 .rp-modal a { color: var(--rp-recovery); }
+
+/* ---------- Menu contextuel carte (clic long / clic droit) ---------- */
+.rp-context-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 170px;
+}
+.rp-context-menu button {
+  text-align: left;
+  background: var(--rp-surface-2);
+  color: var(--rp-text);
+  border: 1px solid var(--rp-line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.rp-context-menu button:active { background: var(--rp-effort); color: #14100C; }
+.leaflet-popup.rp-context-popup .leaflet-popup-content-wrapper {
+  background: var(--rp-surface);
+  color: var(--rp-text);
+}
+.leaflet-popup.rp-context-popup .leaflet-popup-tip { background: var(--rp-surface); }
 
 #poi-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13px; max-height: 140px; overflow-y: auto; }
 #poi-list li { padding: 6px 0; border-bottom: 1px solid var(--rp-line); }
@@ -446,7 +477,13 @@ body {
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -4px 20px var(--rp-shadow);
     transition: top 0.25s ease;
-    z-index: 900;
+    /* Leaflet donne à ses propres contrôles (attribution, zoom...) un
+       z-index de 1000. Comme #rp-sheet n'établissait pas de contexte
+       d'empilement suffisamment élevé, le contrôle d'attribution (fond
+       semi-transparent par défaut chez Leaflet) passait AU-DESSUS du volet
+       et laissait transparaître la carte derrière — la "transparence
+       dérangeante" observée. */
+    z-index: 1200;
     /* Réserve de la place pour que la barre de diagnostic (fixe, en bas de
        l'écran) ne masque plus le bas du contenu du volet — cause du bug
        "le bas du panneau reste caché derrière le diagnostic". */

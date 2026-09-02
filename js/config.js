@@ -3,7 +3,7 @@
  * Responsabilité unique : configuration (aucune logique métier ici).
  */
 
-const RP_VERSION = '0.5.0';
+const RP_VERSION = '0.6.0';
 
 const RP_CONFIG = {
   // -- Fonds de carte --
@@ -20,6 +20,22 @@ const RP_CONFIG = {
       options: {
         maxZoom: 17,
         attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)'
+      }
+    },
+    satellite: {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      options: {
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+      }
+    },
+    // Repères (routes, noms de lieux) semi-transparents, à superposer à la
+    // couche satellite pour obtenir un rendu "hybride".
+    satelliteLabels: {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      options: {
+        maxZoom: 19,
+        attribution: 'Esri'
       }
     }
   },

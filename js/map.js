@@ -29,10 +29,15 @@ const RPMap = (() => {
 
     const osm = L.tileLayer(RP_CONFIG.tileLayers.osm.url, RP_CONFIG.tileLayers.osm.options);
     const topo = L.tileLayer(RP_CONFIG.tileLayers.topo.url, RP_CONFIG.tileLayers.topo.options);
+    const satellite = L.tileLayer(RP_CONFIG.tileLayers.satellite.url, RP_CONFIG.tileLayers.satellite.options);
+    const satelliteLabels = L.tileLayer(RP_CONFIG.tileLayers.satelliteLabels.url, RP_CONFIG.tileLayers.satelliteLabels.options);
+    // "Hybride" = satellite + repères (routes, noms de lieux) groupés en une
+    // seule entrée sélectionnable dans le contrôle de calques.
+    const hybrid = L.layerGroup([satellite, satelliteLabels]);
     osm.addTo(map);
 
     L.control.layers(
-      { 'Rues (OSM)': osm, 'Relief (OpenTopoMap)': topo },
+      { 'Rues (OSM)': osm, 'Relief (OpenTopoMap)': topo, 'Satellite': satellite, 'Hybride (satellite + repères)': hybrid },
       {
         'Itinéraire Route': routeLayers.route,
         'Itinéraire Chemins': routeLayers.chemins,
