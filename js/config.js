@@ -3,7 +3,7 @@
  * Responsabilité unique : configuration (aucune logique métier ici).
  */
 
-const RP_VERSION = '0.4.0';
+const RP_VERSION = '0.5.0';
 
 const RP_CONFIG = {
   // -- Fonds de carte --
@@ -47,8 +47,14 @@ const RP_CONFIG = {
     },
     brouter: {
       baseUrl: 'https://brouter.de/brouter',
+      // v0.5.0 — 'route' utilisait 'shortest', qui n'est PAS un profil piéton :
+      // c'est le profil voiture "trajet le plus court" de BRouter. Cela
+      // expliquait que le mode Route ne privilégie pas fiablement la route
+      // goudronnée (poids/préférences pensés pour une voiture, pas un
+      // coureur). 'foot-fastest' est le profil piéton de BRouter orienté
+      // voies rapides/goudronnées, cohérent avec l'intention du mode Route.
       profiles: {
-        route: 'shortest',
+        route: 'foot-fastest',
         chemins: 'trekking',
         exercices: 'hiking-mountain'
       }

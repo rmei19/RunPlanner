@@ -400,13 +400,16 @@ const RPUi = (() => {
         const color = seg.type === 'effort' ? '#FF5A3C' : seg.type === 'recovery' ? '#35D4A7' : '#E8C15A';
         const segLatLngs = seg.coords.map(c => [c[0], c[1]]);
         if (segLatLngs.length > 1) {
-          L.polyline(segLatLngs, { color, weight: 5, opacity: 0.9 }).addTo(layer);
+          drawLineWithCasing(segLatLngs, color, layer);
         }
         renderSplitLabel(seg.coords[Math.floor(seg.coords.length / 2)], seg.label, color);
       });
     } else {
-      const color = currentMode === 'chemins' ? '#E8C15A' : currentMode === 'exercices' ? '#FF5A3C' : '#35D4A7';
-      L.polyline(latlngs, { color, weight: 5, opacity: 0.9 }).addTo(layer);
+      // Le mode Route utilisait un vert menthe qui se fondait dans les zones
+      // vertes (forêts/parcs) des fonds de carte OSM — remplacé par un bleu
+      // vif, plus contrasté sur la quasi-totalité des fonds de carte.
+      const color = currentMode === 'chemins' ? '#E8C15A' : currentMode === 'exercices' ? '#FF5A3C' : '#2F7DFF';
+      drawLineWithCasing(latlngs, color, layer);
       renderKmLabels(result.coords, layer);
     }
 
@@ -417,6 +420,17 @@ const RPUi = (() => {
     }
 
     RPMap.fitToLayer(currentMode);
+  }
+
+  /**
+   * Trace le tracé avec un liseré sombre semi-transparent dessous (technique
+   * cartographique standard) : garde le tracé lisible quel que soit le fond
+   * de carte (routes claires, zones vertes, relief OpenTopoMap...), là où une
+   * simple ligne colorée fine pouvait s'y fondre et devenir peu visible.
+   */
+  function drawLineWithCasing(latlngs, color, layer, weight = 6) {
+    L.polyline(latlngs, { color: '#000000', weight: weight + 4, opacity: 0.35, lineCap: 'round', lineJoin: 'round' }).addTo(layer);
+    L.polyline(latlngs, { color, weight, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(layer);
   }
 
   /** Étiquettes km, style "bib" (marqueur de dossard), tous les kilomètres. */
@@ -500,10 +514,27 @@ const RPUi = (() => {
   function exportCurrent(format) {
     if (!lastResult) return showError('Générez un parcours avant d\'exporter.');
     const name = `RunPlanner_${currentMode}_${new Date().toISOString().slice(0, 10)}`;
-    if (format === 'gpx') RPExport.exportGpx(lastResult.coords, name, lastSegments);
-    if (format === 'tcx') RPExport.exportTcx(lastResult.coords, name, lastSegments);
-    if (format === 'fit') RPExport.exportFit(lastResult.coords, name, lastSegments);
-    RPDiag.log('info', `Export ${format.toUpperCase()} déclenché.`);
+    let ok = false;
+    try {
+      if (format === 'gpx') ok = RPExport.exportGpx(lastResult.coords, name, lastSegments);
+      if (format === 'tcx') ok = RPExport.exportTcx(lastResult.coords, name, lastSegments);
+      if (format === 'fit') ok = RPExport.exportFit(lastResult.coords, name, lastSegments);
+    } catch (e) {
+      RPDiag.log('error', `Export ${format.toUpperCase()} a levé une exception: ${e.message}`);
+    }
+
+    // Retour visuel explicite sur le bouton lui-même : le téléchargement est
+    // souvent silencieux sur mobile (pas de fenêtre visible), donnant
+    // l'impression qu'il ne s'est rien passé même quand ça a fonctionné.
+    const btn = document.getElementById(`export-${format}`);
+    if (btn) {
+      const original = btn.textContent;
+      btn.textContent = ok ? '✓ Téléchargé' : '⚠️ Échec';
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 2200);
+    }
+    if (!ok) showError(`L'export ${format.toUpperCase()} a échoué. Vérifiez le panneau 🩺 Diagnostic pour le détail, ou réessayez.`);
+    RPDiag.log(ok ? 'info' : 'error', `Export ${format.toUpperCase()} ${ok ? 'réussi' : 'échoué'}.`);
   }
 
   return { init };

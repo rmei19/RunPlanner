@@ -7,14 +7,29 @@
 const RPExport = (() => {
 
   function downloadBlob(filename, blob) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    try {
+      const url = URL.createObjectURL(blob);
+      const supportsDownloadAttr = 'download' in document.createElement('a');
+      if (supportsDownloadAttr) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } else {
+        // Repli pour les navigateurs qui ignorent l'attribut "download" :
+        // ouvre le fichier dans un nouvel onglet, à enregistrer manuellement.
+        window.open(url, '_blank');
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      return true;
+    } catch (e) {
+      console.error('Téléchargement échoué', e);
+      try { RPDiag.log('error', 'Téléchargement échoué (' + filename + '): ' + e.message); } catch (_) {}
+      return false;
+    }
   }
 
   function xmlEscape(str) {
@@ -52,7 +67,7 @@ ${points}
   }
 
   function exportGpx(coords, name, segments) {
-    downloadBlob(`${sanitizeFilename(name)}.gpx`, new Blob([toGpx(coords, name, segments)], { type: 'application/gpx+xml' }));
+    return downloadBlob(`${sanitizeFilename(name)}.gpx`, new Blob([toGpx(coords, name, segments)], { type: 'application/gpx+xml' }));
   }
 
   // ---------- TCX ----------
@@ -88,7 +103,7 @@ ${trackpoints}
   }
 
   function exportTcx(coords, name, segments) {
-    downloadBlob(`${sanitizeFilename(name)}.tcx`, new Blob([toTcx(coords, name, segments)], { type: 'application/vnd.garmin.tcx+xml' }));
+    return downloadBlob(`${sanitizeFilename(name)}.tcx`, new Blob([toTcx(coords, name, segments)], { type: 'application/vnd.garmin.tcx+xml' }));
   }
 
   // ---------- FIT (binaire, encodeur minimal mais conforme au protocole FIT) ----------
@@ -232,10 +247,11 @@ ${trackpoints}
   function exportFit(coords, name, segments) {
     try {
       const bytes = buildCourseFit(coords, name, segments);
-      downloadBlob(`${sanitizeFilename(name)}.fit`, new Blob([bytes], { type: 'application/octet-stream' }));
+      return downloadBlob(`${sanitizeFilename(name)}.fit`, new Blob([bytes], { type: 'application/octet-stream' }));
     } catch (e) {
       RPDiag.log('error', 'Export FIT échoué: ' + e.message);
       alert("L'export FIT a échoué. Essayez GPX ou TCX en alternative.");
+      return false;
     }
   }
 
