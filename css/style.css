@@ -267,6 +267,7 @@ body {
 .rp-summary-figure small { font-size: 16px; color: var(--rp-text-dim); }
 .rp-summary-sub { font-size: 12px; color: var(--rp-text-dim); font-family: var(--rp-font-mono); }
 .rp-summary-delta { font-size: 12px; color: var(--rp-route-accent); }
+.rp-summary-warn { font-size: 11px; color: var(--rp-effort); margin-top: 4px; }
 .rp-error { color: var(--rp-effort); font-size: 13px; }
 
 .rp-elevation {

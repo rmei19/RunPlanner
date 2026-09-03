@@ -25,7 +25,7 @@
 
 const RPLoops = (() => {
   const CIRCUITY = RP_CONFIG.routing.circuityFactor;
-  const MAX_ATTEMPTS = 4;
+  const MAX_ATTEMPTS = 5;
 
   /** Déplace un point de `distanceM` mètres dans la direction `bearingDeg` (0=Nord). */
   function destinationPoint(lat, lon, bearingDeg, distanceM) {
@@ -80,9 +80,21 @@ const RPLoops = (() => {
     return result;
   }
 
-  async function tryRoundTrip(start, targetDistanceM, mode, seed) {
-    const result = await RPRouting.routeRoundTrip(start, targetDistanceM, mode, seed);
-    return annotate(validateAndFlag(result), targetDistanceM);
+  async function tryRoundTrip(start, targetDistanceM, mode, seed, orsState) {
+    // orsState.length est corrigé d'une tentative à l'autre, exactement comme
+    // state.radius pour le repli polygone (voir tryPolygon ci-dessous) — ce
+    // correctif manquait : avant, chaque tentative round-trip redemandait
+    // littéralement la distance cible, même si la précédente avait débordé
+    // de +100%, d'où des écarts qui ne s'amélioraient jamais d'un essai à
+    // l'autre.
+    const requestLength = orsState ? orsState.length : targetDistanceM;
+    const result = await RPRouting.routeRoundTrip(start, requestLength, mode, seed);
+    const validated = annotate(validateAndFlag(result), targetDistanceM);
+    if (orsState && targetDistanceM > 0 && validated.distanceM > 0 && Math.abs(validated.deltaPct) > 10) {
+      const ratio = targetDistanceM / validated.distanceM;
+      orsState.length *= Math.pow(ratio, 0.7);
+    }
+    return validated;
   }
 
   /**
@@ -108,17 +120,18 @@ const RPLoops = (() => {
   async function bestOfAttempts(start, targetDistanceM, mode, fixedVertices, randomizeBearing) {
     const attempts = [];
     const vertices = fixedVertices || (5 + Math.floor(Math.random() * 4)); // fixé une fois pour tout l'appel
-    const seedBearing = randomizeBearing ? Math.random() * 360 : 0;
-    const shape = makeShape(vertices, seedBearing);
+    let seedBearing = randomizeBearing ? Math.random() * 360 : 0;
+    let shape = makeShape(vertices, seedBearing);
     const initialRadius = (targetDistanceM / CIRCUITY) / (2 * Math.PI);
     const polygonState = { radius: initialRadius };
+    const orsState = { length: targetDistanceM };
     let orsAvailable = true;
 
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       let attempt = null;
       if (orsAvailable) {
         try {
-          attempt = await tryRoundTrip(start, targetDistanceM, mode, Date.now() % 100000 + i);
+          attempt = await tryRoundTrip(start, targetDistanceM, mode, Date.now() % 100000 + i, orsState);
         } catch (e) {
           orsAvailable = false; // inutile de retenter ORS aux tours suivants (pas de clé / échec net)
           RPDiag.log('info', `Boucle native ORS indisponible (${e.message}), repli sur construction polygonale.`);
@@ -134,6 +147,17 @@ const RPLoops = (() => {
       if (attempt) {
         attempts.push(attempt);
         if (!attempt.hasSignificantOverlap && Math.abs(attempt.deltaPct) <= 15) break; // assez bon, on arrête
+        // Un chevauchement persistant suggère que CETTE géométrie précise
+        // butte sur une impasse du réseau routier local (ex: une seule route
+        // d'accès) — avant, on continuait à corriger seulement le rayon de
+        // la même forme, ce qui ne peut jamais résoudre un problème de
+        // topologie. On tire une forme différente pour la tentative
+        // polygonale suivante, avec un rayon repartant de zéro.
+        if (attempt.hasSignificantOverlap && !orsAvailable) {
+          seedBearing = randomizeBearing ? Math.random() * 360 : seedBearing + 53;
+          shape = makeShape(vertices, seedBearing);
+          polygonState.radius = initialRadius;
+        }
       }
     }
 

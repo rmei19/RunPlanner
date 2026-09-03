@@ -541,6 +541,7 @@ const RPUi = (() => {
         <span class="rp-summary-figure">${km} <small>km</small></span>
         <span class="rp-summary-sub">${dur} · source : ${result.source || 'segments composés'}</span>
         ${result.deltaPct != null ? `<span class="rp-summary-delta">${result.deltaPct > 0 ? '+' : ''}${result.deltaPct}% vs cible</span>` : ''}
+        ${result.hasSignificantOverlap ? `<span class="rp-summary-warn">⚠️ Réseau routier peu maillé ici : portion en aller-retour malgré plusieurs tentatives.</span>` : ''}
       </div>`;
     el.hidden = false;
     renderElevationProfile(result.coords);
