@@ -17,6 +17,7 @@ const RPMap = (() => {
   let userLocationMarker = null;
   let userAccuracyCircle = null;
   let locationCallbacks = [];
+  let locationErrorCallbacks = [];
 
   function init(containerId) {
     map = L.map(containerId, {
@@ -63,6 +64,9 @@ const RPMap = (() => {
     });
     map.on('locationerror', (e) => {
       try { RPDiag.log('warn', 'Géolocalisation indisponible: ' + e.message); } catch (_) {}
+      locationErrorCallbacks.forEach(cb => {
+        try { cb(e); } catch (err) { console.error(err); }
+      });
     });
     locateMe();
 
@@ -78,6 +82,11 @@ const RPMap = (() => {
   /** Enregistre un callback appelé à chaque localisation réussie: cb(latlng, accuracyM). */
   function onLocationFound(cb) {
     locationCallbacks.push(cb);
+  }
+
+  /** Enregistre un callback appelé à chaque échec de localisation: cb(errorEvent). */
+  function onLocationError(cb) {
+    locationErrorCallbacks.push(cb);
   }
 
   function showUserLocationMarker(latlng, accuracyM) {
@@ -111,6 +120,6 @@ const RPMap = (() => {
   return {
     init, clearRoute, clearAllRoutes, getMap,
     getRouteLayer, getMarkersLayer, getPoiLayer, fitToLayer,
-    locateMe, onLocationFound
+    locateMe, onLocationFound, onLocationError
   };
 })();

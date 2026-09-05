@@ -227,6 +227,7 @@ body {
   color: var(--rp-text-dim);
   font-style: italic;
 }
+.rp-hint-warn { color: var(--rp-effort); font-style: normal; }
 
 .rp-point-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .rp-btn {
@@ -511,11 +512,22 @@ body {
     top: 0;
     z-index: 10;
     background: var(--rp-surface);
+    /* Un élément position:sticky peut, sur certains moteurs mobiles, ne pas
+       être clippé par le overflow+border-radius du parent une fois "collé"
+       en haut — ses coins peuvent alors légèrement déborder de la forme
+       arrondie du volet et laisser voir la carte derrière (bien plus visible
+       sur le fond satellite, très texturé, que sur les fonds OSM plats). En
+       donnant à la poignée elle-même les mêmes coins arrondis que le volet,
+       ses propres coins restent opaques quoi qu'il arrive. */
+    border-radius: 16px 16px 0 0;
   }
   .rp-handle-bar {
     width: 40px;
     height: 4px;
-    background: var(--rp-line);
+    /* Couleur fixe à contraste suffisant plutôt que var(--rp-line) (pensée
+       pour de fins séparateurs à 10% d'opacité) : sur un fond où la carte
+       pouvait transparaître, la poignée devenait quasi invisible. */
+    background: var(--rp-text-dim);
     border-radius: 999px;
   }
   .rp-handle-label {

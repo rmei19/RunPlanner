@@ -150,12 +150,38 @@ const RPUi = (() => {
         });
         RPDiag.log('info', `Position détectée automatiquement (précision ~${Math.round(accuracyM)} m).`);
       }
+      clearLocationHint();
+    });
+
+    RPMap.onLocationError((e) => {
+      // code 1 = PERMISSION_DENIED : une fois l'autorisation refusée, le
+      // navigateur ne réaffiche plus JAMAIS la demande de son propre chef —
+      // relancer la géolocalisation depuis le code ne peut rien y faire.
+      // Avant, cet échec ne remontait que dans le journal diagnostic
+      // (peu visible) et donnait l'impression que le bouton ne faisait rien.
+      if (e.code === 1) {
+        showLocationHint('Localisation bloquée pour ce site. Ouvrez les réglages du site (icône 🔒 ou ⓘ à côté de l\'adresse) pour réautoriser la localisation, puis réessayez.');
+      } else {
+        showLocationHint('Position introuvable pour le moment (GPS/réseau indisponible). Réessayez, ou saisissez une adresse.');
+      }
     });
 
     document.getElementById('locate-me-btn')?.addEventListener('click', () => {
       RPDiag.log('info', 'Nouvelle tentative de géolocalisation demandée.');
       RPMap.locateMe();
     });
+  }
+
+  function showLocationHint(message) {
+    const hint = document.getElementById('locate-hint');
+    if (!hint) return;
+    hint.textContent = message;
+    hint.hidden = false;
+  }
+
+  function clearLocationHint() {
+    const hint = document.getElementById('locate-hint');
+    if (hint) hint.hidden = true;
   }
 
   // ---------- Placement de points sur la carte ----------
