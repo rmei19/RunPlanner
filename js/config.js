@@ -3,7 +3,7 @@
  * Responsabilité unique : configuration (aucune logique métier ici).
  */
 
-const RP_VERSION = '0.6.3';
+const RP_VERSION = '0.6.4';
 
 const RP_CONFIG = {
   // -- Fonds de carte --
@@ -29,8 +29,11 @@ const RP_CONFIG = {
         attribution: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
       }
     },
-    // Repères (routes, noms de lieux) semi-transparents, à superposer à la
-    // couche satellite pour obtenir un rendu "hybride".
+    // Repères (routes, noms de lieux) semi-transparents — non retenu au
+    // final pour le fond "Hybride" (ne montrait que labels/frontières, pas
+    // le réseau routes/chemins lui-même) ; on superpose OpenTopoMap à la
+    // place (voir map.js). Gardé ici au cas où un futur calque optionnel
+    // "repères" serait utile.
     satelliteLabels: {
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
       options: {

@@ -31,14 +31,22 @@ const RPMap = (() => {
     const osm = L.tileLayer(RP_CONFIG.tileLayers.osm.url, RP_CONFIG.tileLayers.osm.options);
     const topo = L.tileLayer(RP_CONFIG.tileLayers.topo.url, RP_CONFIG.tileLayers.topo.options);
     const satellite = L.tileLayer(RP_CONFIG.tileLayers.satellite.url, RP_CONFIG.tileLayers.satellite.options);
-    const satelliteLabels = L.tileLayer(RP_CONFIG.tileLayers.satelliteLabels.url, RP_CONFIG.tileLayers.satelliteLabels.options);
-    // "Hybride" = satellite + repères (routes, noms de lieux) groupés en une
-    // seule entrée sélectionnable dans le contrôle de calques.
-    const hybrid = L.layerGroup([satellite, satelliteLabels]);
+    // "Hybride" = satellite + OpenTopoMap semi-transparent par-dessus.
+    // Le premier essai (satellite + repères Esri "Boundaries and Places")
+    // n'affichait que des noms de lieux/frontières, pas le réseau
+    // routes/chemins lui-même. OpenTopoMap distingue déjà nativement les
+    // routes (traits pleins) des sentiers/chemins (tirets) — en l'affichant
+    // à 55% d'opacité par-dessus le satellite, on obtient le rendu "satellite
+    // + tracé clair routes vs chemins" (cf. l'exemple Komoot fourni).
+    const hybridOverlay = L.tileLayer(RP_CONFIG.tileLayers.topo.url, {
+      ...RP_CONFIG.tileLayers.topo.options,
+      opacity: 0.55
+    });
+    const hybrid = L.layerGroup([satellite, hybridOverlay]);
     osm.addTo(map);
 
     L.control.layers(
-      { 'Rues (OSM)': osm, 'Relief (OpenTopoMap)': topo, 'Satellite': satellite, 'Hybride (satellite + repères)': hybrid },
+      { 'Rues (OSM)': osm, 'Relief (OpenTopoMap)': topo, 'Satellite': satellite, 'Hybride (satellite + routes/chemins)': hybrid },
       {
         'Itinéraire Route': routeLayers.route,
         'Itinéraire Chemins': routeLayers.chemins,

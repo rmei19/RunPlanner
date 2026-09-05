@@ -26,7 +26,8 @@ const RPUi = (() => {
   let waypoints = []; // [{ point:{lat,lon}, marker, label }]
   let lastResult = null;
   let lastSegments = null;
-  let placingFor = 'start'; // 'start' | 'end' | 'waypoint' — mode actif pour le clic carte
+  // (placingFor supprimé en v0.6.4 : le placement se fait via recherche
+  // d'adresse ou appui long / clic droit, plus par simple clic sur la carte.)
   let startSetAutomatically = false;
 
   function init() {
@@ -36,7 +37,6 @@ const RPUi = (() => {
       ['recherche d\'adresses', initAddressFields],
       ['géolocalisation', initGeolocation],
       ['clic sur la carte', initMapClickHandling],
-      ['boutons de placement', initPointButtons],
       ['bouton générer', initGenerateButton],
       ['boutons d\'export', initExportButtons],
       ['sous-formulaires exercices', initExerciseSubforms],
@@ -49,7 +49,6 @@ const RPUi = (() => {
         try { RPDiag.log('error', `Échec init UI "${name}": ${e.message}`); } catch (_) {}
       }
     }
-    updatePlacingHint();
     RPDiag.log('info', 'Interface initialisée.');
   }
 
@@ -185,32 +184,16 @@ const RPUi = (() => {
   }
 
   // ---------- Placement de points sur la carte ----------
+  // v0.6.4 — simplifié à la demande : un simple clic sur la carte ne fait
+  // plus rien (avant, il déplaçait le départ par défaut, ce qui devenait
+  // chaotique dès qu'on cliquait sur la carte pour l'explorer plutôt que
+  // pour placer un point). Le placement se fait désormais uniquement via :
+  // la recherche d'adresse, ou l'appui long / clic droit (menu Départ /
+  // Arrivée / Point de passage / Retirer).
   function initMapClickHandling() {
     const map = RPMap.getMap();
     if (!map) throw new Error('Carte non initialisée : impossible de gérer les clics.');
 
-    map.on('click', (e) => {
-      const point = { lat: e.latlng.lat, lon: e.latlng.lng };
-      if (placingFor === 'waypoint') {
-        handleWaypointClick(point); // ajoute, ou retire si un point existe déjà à cet endroit
-      } else {
-        setPoint(point, placingFor);
-      }
-      // Le mode "départ" reste l'action par défaut après chaque clic ; les
-      // modes "arrivée" et "point de passage" ne s'appliquent qu'au clic
-      // suivant (déclenchés explicitement par les boutons ci-dessous), pour
-      // éviter qu'un simple clic supplémentaire ne modifie un point non voulu.
-      if (placingFor !== 'start') {
-        placingFor = 'start';
-        updatePlacingHint();
-      }
-    });
-
-    // Clic long (mobile) / clic droit (desktop) — Leaflet transforme les deux
-    // en un même événement 'contextmenu', et empêche déjà le menu contextuel
-    // natif du navigateur sur la carte. Ouvre un choix explicite (au lieu de
-    // basculer directement un point de passage) : Départ / Arrivée / Point
-    // de passage — et Retirer si un point de passage existe déjà ici.
     map.on('contextmenu', (e) => {
       const point = { lat: e.latlng.lat, lon: e.latlng.lng };
       showContextMenu(point, e.latlng);
@@ -251,23 +234,6 @@ const RPUi = (() => {
       .openOn(map);
   }
 
-  function initPointButtons() {
-    document.getElementById('set-start-btn')?.addEventListener('click', () => { placingFor = 'start'; updatePlacingHint(); });
-    document.getElementById('set-end-btn')?.addEventListener('click', () => { placingFor = 'end'; updatePlacingHint(); });
-    document.getElementById('add-waypoint-btn')?.addEventListener('click', () => { placingFor = 'waypoint'; updatePlacingHint(); });
-  }
-
-  function updatePlacingHint() {
-    const hint = document.getElementById('placing-hint');
-    if (!hint) return;
-    const labels = {
-      start: 'Cliquez sur la carte pour placer le départ 🏁 (clic long : point de passage)',
-      end: 'Cliquez sur la carte pour placer l\'arrivée 🏁',
-      waypoint: 'Cliquez sur la carte pour ajouter un point de passage ➕'
-    };
-    hint.textContent = labels[placingFor] || '';
-  }
-
   function setPoint(point, target) {
     if (target === 'start') {
       startPoint = point;
@@ -283,16 +249,6 @@ const RPUi = (() => {
 
   // ---------- Points de passage : ajout, retrait, affichage persistant ----------
   const WAYPOINT_REMOVE_RADIUS_M = 35;
-
-  /** Clic (bouton "Point de passage" puis clic carte) ou clic long : ajoute,
-   *  ou retire s'il y a déjà un point de passage à cet endroit. */
-  function handleWaypointClick(point) {
-    if (tryRemoveWaypointNear(point)) {
-      RPDiag.log('info', 'Point de passage retiré.');
-    } else {
-      addWaypoint(point, null);
-    }
-  }
 
   function addWaypoint(point, label) {
     const markers = RPMap.getMarkersLayer();
