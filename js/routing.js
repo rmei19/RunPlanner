@@ -19,17 +19,26 @@ const RPRouting = (() => {
    * Retourne { coords: [[lat,lon,ele], ...], distanceM, durationS, source: 'ors'|'brouter' }
    * ou lance une erreur si les deux moteurs échouent.
    */
-  async function route(points, mode) {
-    try {
-      return await routeWithOrs(points, mode);
-    } catch (e) {
-      RPDiag.log('warn', `ORS a échoué (${e.message}), bascule vers BRouter.`);
+  /**
+   * skipOrs=true évite de retenter ORS quand on sait déjà, dans le contexte
+   * appelant (voir loops.js), qu'il est indisponible pour cette génération —
+   * avant, chaque tentative polygonale retentait ORS individuellement (5
+   * appels ratés en plus de la tentative round-trip), ce qui ajoutait de la
+   * latence et des requêtes inutiles vers un service déjà connu en panne.
+   */
+  async function route(points, mode, skipOrs = false) {
+    if (!skipOrs) {
       try {
-        return await routeWithBrouter(points, mode);
-      } catch (e2) {
-        RPDiag.log('error', `BRouter a échoué aussi (${e2.message}).`);
-        throw new Error('Les deux moteurs de routage ont échoué.');
+        return await routeWithOrs(points, mode);
+      } catch (e) {
+        RPDiag.log('warn', `ORS a échoué (${e.message}), bascule vers BRouter.`);
       }
+    }
+    try {
+      return await routeWithBrouter(points, mode);
+    } catch (e2) {
+      RPDiag.log('error', `BRouter a échoué aussi (${e2.message}).`);
+      throw new Error('Les deux moteurs de routage ont échoué.');
     }
   }
 

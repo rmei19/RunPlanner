@@ -104,9 +104,9 @@ const RPLoops = (() => {
    * que 1) pour éviter les oscillations en terrain irrégulier, où la relation
    * rayon → distance réelle n'est jamais parfaitement linéaire.
    */
-  async function tryPolygon(start, targetDistanceM, mode, shape, state) {
+  async function tryPolygon(start, targetDistanceM, mode, shape, state, skipOrs) {
     const pts = pointsFromShape(start, shape, state.radius);
-    const result = await RPRouting.route(pts, mode);
+    const result = await RPRouting.route(pts, mode, skipOrs);
     const validated = annotate(validateAndFlag(result), targetDistanceM);
     RPDiag.log('info', `Tentative boucle : rayon ${Math.round(state.radius)} m → ${(validated.distanceM / 1000).toFixed(2)} km (écart ${validated.deltaPct}%).`);
     if (targetDistanceM > 0 && validated.distanceM > 0 && Math.abs(validated.deltaPct) > 10) {
@@ -126,6 +126,7 @@ const RPLoops = (() => {
     const polygonState = { radius: initialRadius };
     const orsState = { length: targetDistanceM };
     let orsAvailable = true;
+    let overlapStreak = 0; // nombre de tentatives consécutives avec chevauchement, SUR LA MÊME forme
 
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       let attempt = null;
@@ -139,7 +140,9 @@ const RPLoops = (() => {
       }
       if (!attempt) {
         try {
-          attempt = await tryPolygon(start, targetDistanceM, mode, shape, polygonState);
+          // skipOrs = true dès qu'on sait qu'ORS est indisponible pour cette
+          // génération : évite de le retenter à chaque tentative polygonale.
+          attempt = await tryPolygon(start, targetDistanceM, mode, shape, polygonState, !orsAvailable);
         } catch (e) {
           RPDiag.log('warn', `Tentative de boucle ${i + 1} échouée: ${e.message}`);
         }
@@ -147,16 +150,24 @@ const RPLoops = (() => {
       if (attempt) {
         attempts.push(attempt);
         if (!attempt.hasSignificantOverlap && Math.abs(attempt.deltaPct) <= 15) break; // assez bon, on arrête
-        // Un chevauchement persistant suggère que CETTE géométrie précise
-        // butte sur une impasse du réseau routier local (ex: une seule route
-        // d'accès) — avant, on continuait à corriger seulement le rayon de
-        // la même forme, ce qui ne peut jamais résoudre un problème de
-        // topologie. On tire une forme différente pour la tentative
-        // polygonale suivante, avec un rayon repartant de zéro.
+        // Un chevauchement persistant suggère une impasse du réseau local —
+        // mais un SEUL chevauchement peut aussi n'être qu'un rayon encore mal
+        // calé (la correction n'a pas eu le temps de converger). On laisse
+        // donc 2 tentatives à la MÊME forme avant de conclure qu'elle est
+        // structurellement mauvaise et d'en tirer une nouvelle — avant, on
+        // changeait de forme dès le premier chevauchement, ce qui jetait la
+        // correction de rayon en cours et produisait des écarts erratiques
+        // au lieu de converger (34% → 52% → 51%… observé en test terrain).
         if (attempt.hasSignificantOverlap && !orsAvailable) {
-          seedBearing = randomizeBearing ? Math.random() * 360 : seedBearing + 53;
-          shape = makeShape(vertices, seedBearing);
-          polygonState.radius = initialRadius;
+          overlapStreak++;
+          if (overlapStreak >= 2) {
+            seedBearing = randomizeBearing ? Math.random() * 360 : seedBearing + 53;
+            shape = makeShape(vertices, seedBearing);
+            polygonState.radius = initialRadius;
+            overlapStreak = 0;
+          }
+        } else {
+          overlapStreak = 0;
         }
       }
     }
