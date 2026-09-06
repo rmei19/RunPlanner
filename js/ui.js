@@ -37,6 +37,7 @@ const RPUi = (() => {
       ['recherche d\'adresses', initAddressFields],
       ['géolocalisation', initGeolocation],
       ['clic sur la carte', initMapClickHandling],
+      ['inversion départ/arrivée', initReverseButton],
       ['bouton générer', initGenerateButton],
       ['boutons d\'export', initExportButtons],
       ['sous-formulaires exercices', initExerciseSubforms],
@@ -127,6 +128,44 @@ const RPUi = (() => {
     RPDiag.log('info', `${target === 'start' ? 'Départ' : 'Arrivée'} effacé(e).`);
   }
 
+  /** Échange départ et arrivée (points, marqueurs, champs d'adresse), et
+   *  inverse l'ordre des points de passage pour que le sens global du
+   *  parcours suive. */
+  function initReverseButton() {
+    document.getElementById('reverse-btn')?.addEventListener('click', () => {
+      if (!startPoint && !endPoint) {
+        showError('Placez au moins un départ ou une arrivée avant d\'inverser.');
+        return;
+      }
+
+      [startPoint, endPoint] = [endPoint, startPoint];
+
+      const startInput = document.getElementById('address-search');
+      const endInput = document.getElementById('address-search-end');
+      if (startInput && endInput) {
+        [startInput.value, endInput.value] = [endInput.value, startInput.value];
+      }
+
+      if (startPoint) addOrMoveMarker('start', startPoint, '🏁 Départ', '#35D4A7'); else clearMarkerOnly('start');
+      if (endPoint) addOrMoveMarker('end', endPoint, '🏁 Arrivée', '#FF5A3C'); else clearMarkerOnly('end');
+      startSetAutomatically = false;
+
+      waypoints.reverse();
+      renumberWaypoints();
+      renderWaypointChips();
+
+      RPDiag.log('info', 'Départ et arrivée inversés.');
+    });
+  }
+
+  function clearMarkerOnly(key) {
+    const markers = RPMap.getMarkersLayer();
+    if (markerRefs[key]) {
+      markers.removeLayer(markerRefs[key]);
+      delete markerRefs[key];
+    }
+  }
+
   function wireAddressField(inputId, resultsId, target) {
     const input = document.getElementById(inputId);
     const results = document.getElementById(resultsId);
@@ -150,8 +189,7 @@ const RPUi = (() => {
                                  // — avant, vider le champ sans autre confirmation donnait
                                  // l'impression que le point de passage avait disparu.
             } else {
-              setPoint({ lat: m.lat, lon: m.lon }, target);
-              input.value = m.label;
+              setPoint({ lat: m.lat, lon: m.lon }, target, m.label);
             }
             results.innerHTML = '';
           });
@@ -168,11 +206,7 @@ const RPUi = (() => {
       // déjà choisi un point lui-même (recherche ou clic manuel).
       if (!startPoint || startSetAutomatically) {
         startSetAutomatically = true;
-        setPoint({ lat: latlng.lat, lon: latlng.lng }, 'start');
-        RPGeocoder.reverse(latlng.lat, latlng.lng).then(label => {
-          const input = document.getElementById('address-search');
-          if (input && !input.value) input.value = label;
-        });
+        setPoint({ lat: latlng.lat, lon: latlng.lng }, 'start'); // géocodage inverse automatique (voir setPoint)
         RPDiag.log('info', `Position détectée automatiquement (précision ~${Math.round(accuracyM)} m).`);
       }
       clearLocationHint();
@@ -260,17 +294,33 @@ const RPUi = (() => {
       .openOn(map);
   }
 
-  function setPoint(point, target) {
+  /**
+   * label optionnel : si fourni (sélection via un champ de recherche),
+   * remplit directement le champ d'adresse correspondant. Sinon (clic long /
+   * menu contextuel / géolocalisation), l'adresse est retrouvée en
+   * arrière-plan par géocodage inverse et affichée dès qu'elle arrive — même
+   * logique que pour les points de passage, qui l'avaient déjà.
+   */
+  function setPoint(point, target, label) {
     if (target === 'start') {
       startPoint = point;
       startSetAutomatically = false; // un point choisi explicitement n'est plus "automatique"
       addOrMoveMarker('start', point, '🏁 Départ', '#35D4A7');
+      updateAddressField('address-search', point, label);
     } else if (target === 'end') {
       endPoint = point;
       addOrMoveMarker('end', point, '🏁 Arrivée', '#FF5A3C');
+      updateAddressField('address-search-end', point, label);
     } else {
-      addWaypoint(point, null);
+      addWaypoint(point, label);
     }
+  }
+
+  function updateAddressField(inputId, point, label) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    if (label) { input.value = label; return; }
+    RPGeocoder.reverse(point.lat, point.lon).then(addr => { input.value = addr; });
   }
 
   // ---------- Points de passage : ajout, retrait, affichage persistant ----------
@@ -278,7 +328,9 @@ const RPUi = (() => {
 
   function addWaypoint(point, label) {
     const markers = RPMap.getMarkersLayer();
-    const marker = L.circleMarker([point.lat, point.lon], { radius: 7, color: '#E8C15A', fillColor: '#E8C15A', fillOpacity: 1 })
+    // Halo blanc (contour) pour rester bien visible sur n'importe quel fond
+    // de carte (satellite compris), en plus d'une couleur plus franche.
+    const marker = L.circleMarker([point.lat, point.lon], { radius: 8, color: '#FFFFFF', weight: 3, fillColor: '#F2B705', fillOpacity: 1 })
       .addTo(markers).bindTooltip(`Point ${waypoints.length + 1}`);
     const entry = { point, marker, label: label || '…' };
     waypoints.push(entry);
@@ -354,7 +406,10 @@ const RPUi = (() => {
   function addOrMoveMarker(key, point, label, color) {
     const markers = RPMap.getMarkersLayer();
     if (markerRefs[key]) markers.removeLayer(markerRefs[key]);
-    markerRefs[key] = L.circleMarker([point.lat, point.lon], { radius: 8, color, fillColor: color, fillOpacity: 1 })
+    // Halo blanc (contour épais) pour rester bien visible sur tout fond de
+    // carte, y compris satellite — un simple remplissage fin se fondait
+    // trop facilement dans certains arrière-plans.
+    markerRefs[key] = L.circleMarker([point.lat, point.lon], { radius: 9, color: '#FFFFFF', weight: 3, fillColor: color, fillOpacity: 1 })
       .addTo(markers).bindTooltip(label, { permanent: false });
   }
 
@@ -393,7 +448,7 @@ const RPUi = (() => {
     } else if (subMode === 'boucle-aleatoire') {
       result = await RPLoops.generateRandomLoop(startPoint, targetM, currentMode);
     } else if (subMode === 'aller-retour') {
-      result = await RPLoops.generateOutAndBack(startPoint, targetM, currentMode);
+      result = await RPLoops.generateOutAndBack(startPoint, targetM, currentMode, endPoint);
     } else if (subMode === 'a-vers-b') {
       if (!endPoint) throw new Error('Placez un point d\'arrivée pour le mode Aller A→B.');
       result = await RPLoops.generatePointToPoint(startPoint, endPoint, targetM, currentMode, waypoints.map(w => w.point));

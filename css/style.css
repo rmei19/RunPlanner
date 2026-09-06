@@ -109,11 +109,24 @@ body {
   width: 380px;
   background: var(--rp-surface);
   border-right: 1px solid var(--rp-line);
+  display: flex;
+  flex-direction: column;
+}
+
+/* La zone défilante est un enfant séparé de la poignée (voir #panel-handle) :
+   sur mobile, ça évite complètement les soucis de rendu de position:sticky
+   combiné à overflow+border-radius (fond visible à travers la poignée,
+   persistant malgré plusieurs tentatives de correctif ciblées) — ici, la
+   poignée n'est simplement plus DANS la zone qui défile, donc il n'y a plus
+   de superposition à gérer du tout. */
+#rp-sheet-scroll {
   overflow-y: auto;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
 }
 
 #panel-handle {
@@ -511,7 +524,15 @@ body {
 
   /* Bouton de bascule agrandi (44px de cible tactile min., recommandation
      Apple/Google) — l'ancienne barre de 40×4px était trop petite pour être
-     fiablement touchée sur mobile. */
+     fiablement touchée sur mobile.
+     v0.6.7 — abandon complet de position:sticky : malgré le correctif des
+     coins arrondis en v0.6.3, un fond restait visible à travers la poignée
+     (persistant, signalé à nouveau). Plutôt que de continuer à corriger un
+     rendu de sticky+overflow+border-radius connu pour être capricieux selon
+     les moteurs mobiles, la poignée est maintenant un simple enfant flex
+     NON scrollable, structurellement séparé de la zone qui défile
+     (#rp-sheet-scroll) — il n'y a donc plus de superposition à gérer du
+     tout, quel que soit le moteur de rendu. */
   #panel-handle {
     display: flex;
     flex-direction: column;
@@ -519,22 +540,9 @@ body {
     gap: 6px;
     width: 100%;
     padding: 10px 0 14px;
-    margin: -16px 0 4px;
+    flex-shrink: 0;
     -webkit-tap-highlight-color: transparent;
-    /* Reste visible et tappable en toutes circonstances, même quand le
-       contenu du volet défile en-dessous (bug : la poignée défilait avec
-       le reste et disparaissait du haut de la fenêtre). */
-    position: sticky;
-    top: 0;
-    z-index: 10;
     background: var(--rp-surface);
-    /* Un élément position:sticky peut, sur certains moteurs mobiles, ne pas
-       être clippé par le overflow+border-radius du parent une fois "collé"
-       en haut — ses coins peuvent alors légèrement déborder de la forme
-       arrondie du volet et laisser voir la carte derrière (bien plus visible
-       sur le fond satellite, très texturé, que sur les fonds OSM plats). En
-       donnant à la poignée elle-même les mêmes coins arrondis que le volet,
-       ses propres coins restent opaques quoi qu'il arrive. */
     border-radius: 16px 16px 0 0;
   }
   .rp-handle-bar {

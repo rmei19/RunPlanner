@@ -46,10 +46,12 @@
   <div id="map" role="application" aria-label="Carte du parcours"></div>
 
   <aside id="rp-sheet">
-    <button id="panel-handle" type="button" aria-expanded="false" aria-controls="rp-sheet">
+    <button id="panel-handle" type="button" aria-expanded="false" aria-controls="rp-sheet-scroll">
       <span class="rp-handle-bar" aria-hidden="true"></span>
       <span class="rp-handle-label">Options du parcours</span>
     </button>
+
+    <div id="rp-sheet-scroll">
 
     <div class="rp-field">
       <label for="address-search">Adresse de départ</label>
@@ -71,6 +73,8 @@
       </div>
       <ul id="address-results-end"></ul>
     </div>
+
+    <button class="rp-btn" id="reverse-btn">🔄 Inverser départ / arrivée</button>
 
     <div class="rp-field">
       <label for="address-search-waypoint">Point de passage (facultatif)</label>
@@ -97,6 +101,7 @@
         <button class="rp-submode" data-submode="points-de-passage">Points de passage</button>
         <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
       </div>
+      <p class="rp-hint">💡 Aller-retour : rejoint l'arrivée si vous en avez placé une, sinon part à mi-distance de la cible dans une direction aléatoire, puis revient par le même chemin.</p>
       <div class="rp-field">
         <label for="route-distance">Distance cible (km)</label>
         <input id="route-distance" type="number" min="1" step="0.5" value="5">
@@ -113,6 +118,7 @@
         <button class="rp-submode" data-submode="points-de-passage">Points de passage</button>
         <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
       </div>
+      <p class="rp-hint">💡 Aller-retour : rejoint l'arrivée si vous en avez placé une, sinon part à mi-distance de la cible dans une direction aléatoire, puis revient par le même chemin.</p>
       <div class="rp-field">
         <label for="chemins-distance">Distance cible (km)</label>
         <input id="chemins-distance" type="number" min="1" step="0.5" value="8">
@@ -185,6 +191,8 @@
       <button class="rp-btn" id="export-tcx">Export TCX</button>
       <button class="rp-btn" id="export-fit">Export FIT</button>
     </div>
+
+    </div><!-- /#rp-sheet-scroll -->
   </aside>
 </main>
 

@@ -195,11 +195,27 @@ const RPLoops = (() => {
   }
 
   /** Aller-retour simple sur un cap donné (ou aléatoire) — l'aller-retour est ICI volontaire. */
-  async function generateOutAndBack(start, targetDistanceM, mode, bearingDeg = null) {
-    const bearing = bearingDeg ?? Math.random() * 360;
-    const turnaround = destinationPoint(start.lat, start.lon, bearing, targetDistanceM / 2);
+  /**
+   * Aller-retour : si une arrivée a été placée, va jusque-là puis revient
+   * (l'arrivée définit le point de retournement) — avant, l'arrivée était
+   * totalement ignorée et un point de retournement aléatoire était choisi à
+   * chaque fois, ce qui rendait le mode difficile à comprendre ("pourquoi ça
+   * part dans cette direction ?"). Sans arrivée placée, comportement
+   * inchangé : direction aléatoire (ou imposée), sur la moitié de la
+   * distance cible.
+   */
+  async function generateOutAndBack(start, targetDistanceM, mode, end = null, bearingDeg = null) {
+    const usedEndPoint = !!end;
+    const turnaround = usedEndPoint
+      ? end
+      : destinationPoint(start.lat, start.lon, bearingDeg ?? Math.random() * 360, targetDistanceM / 2);
+
     const result = await RPRouting.route([start, turnaround, start], mode);
-    return { ...result, kind: 'aller-retour', isIntentionalOutAndBack: true };
+    // Pas de comparaison "% vs cible" quand l'arrivée pilote le point de
+    // retournement : la distance obtenue dépend alors de là où elle a été
+    // placée, pas de la distance cible saisie — l'écart n'aurait pas de sens.
+    const finalResult = usedEndPoint ? result : annotate(result, targetDistanceM);
+    return { ...finalResult, kind: 'aller-retour', isIntentionalOutAndBack: true, usedEndPoint };
   }
 
   /**
