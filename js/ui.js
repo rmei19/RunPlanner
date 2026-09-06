@@ -99,6 +99,32 @@ const RPUi = (() => {
     wireAddressField('address-search', 'address-results', 'start');
     wireAddressField('address-search-end', 'address-results-end', 'end');
     wireAddressField('address-search-waypoint', 'address-results-waypoint', 'waypoint');
+
+    // Suppression facile du départ/arrivée sur mobile : avant, la seule
+    // façon de "défaire" un point placé était le menu d'appui long, peu
+    // pratique à viser précisément à l'endroit exact du marqueur sur un
+    // petit écran tactile.
+    document.getElementById('clear-start-btn')?.addEventListener('click', () => clearPoint('start'));
+    document.getElementById('clear-end-btn')?.addEventListener('click', () => clearPoint('end'));
+  }
+
+  function clearPoint(target) {
+    const markers = RPMap.getMarkersLayer();
+    if (markerRefs[target]) {
+      markers.removeLayer(markerRefs[target]);
+      delete markerRefs[target];
+    }
+    if (target === 'start') {
+      startPoint = null;
+      startSetAutomatically = false;
+      const input = document.getElementById('address-search');
+      if (input) input.value = '';
+    } else if (target === 'end') {
+      endPoint = null;
+      const input = document.getElementById('address-search-end');
+      if (input) input.value = '';
+    }
+    RPDiag.log('info', `${target === 'start' ? 'Départ' : 'Arrivée'} effacé(e).`);
   }
 
   function wireAddressField(inputId, resultsId, target) {
@@ -370,7 +396,7 @@ const RPUi = (() => {
       result = await RPLoops.generateOutAndBack(startPoint, targetM, currentMode);
     } else if (subMode === 'a-vers-b') {
       if (!endPoint) throw new Error('Placez un point d\'arrivée pour le mode Aller A→B.');
-      result = await RPLoops.generatePointToPoint(startPoint, endPoint, targetM, currentMode);
+      result = await RPLoops.generatePointToPoint(startPoint, endPoint, targetM, currentMode, waypoints.map(w => w.point));
     } else if (subMode === 'points-de-passage') {
       if (waypoints.length < 1) throw new Error('Ajoutez au moins un point de passage.');
       result = await RPLoops.generateWaypointLoop([startPoint, ...waypoints.map(w => w.point)], currentMode);

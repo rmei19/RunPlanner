@@ -202,8 +202,21 @@ const RPLoops = (() => {
     return { ...result, kind: 'aller-retour', isIntentionalOutAndBack: true };
   }
 
-  /** A → B direct, ou avec détours pour allonger jusqu'à une distance cible. */
-  async function generatePointToPoint(start, end, targetDistanceM, mode) {
+  /**
+   * A → B direct, ou avec détours pour allonger jusqu'à une distance cible.
+   * Si des points de passage explicites ont été placés par l'utilisateur, ils
+   * sont respectés en priorité (route ordonnée start → passages → end) — le
+   * détour synthétique automatique ne s'applique que si aucun point de
+   * passage n'a été placé (avant, les points de passage étaient purement et
+   * simplement ignorés en mode A→B, alors que l'interface permet pourtant
+   * d'en ajouter quel que soit le sous-mode actif).
+   */
+  async function generatePointToPoint(start, end, targetDistanceM, mode, waypoints = []) {
+    if (waypoints.length > 0) {
+      const result = await RPRouting.route([start, ...waypoints, end], mode);
+      return { ...validateAndFlag(result), kind: 'a-vers-b-points-de-passage' };
+    }
+
     const direct = await RPRouting.route([start, end], mode);
     if (!targetDistanceM || direct.distanceM >= targetDistanceM * 0.95) {
       return { ...direct, kind: 'a-vers-b' };

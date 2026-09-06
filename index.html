@@ -53,7 +53,10 @@
 
     <div class="rp-field">
       <label for="address-search">Adresse de départ</label>
-      <input id="address-search" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
+      <div class="rp-field-with-clear">
+        <input id="address-search" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
+        <button type="button" id="clear-start-btn" class="rp-clear-btn" aria-label="Effacer le départ">✕</button>
+      </div>
       <ul id="address-results"></ul>
     </div>
 
@@ -62,7 +65,10 @@
 
     <div class="rp-field">
       <label for="address-search-end">Adresse d'arrivée (facultatif)</label>
-      <input id="address-search-end" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
+      <div class="rp-field-with-clear">
+        <input id="address-search-end" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
+        <button type="button" id="clear-end-btn" class="rp-clear-btn" aria-label="Effacer l'arrivée">✕</button>
+      </div>
       <ul id="address-results-end"></ul>
     </div>
 

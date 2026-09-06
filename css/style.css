@@ -199,6 +199,22 @@ body {
 .rp-row > * { flex: 1; }
 
 #address-search { width: 100%; }
+
+.rp-field-with-clear {
+  display: flex;
+  gap: 6px;
+}
+.rp-field-with-clear input { flex: 1; min-width: 0; }
+.rp-clear-btn {
+  flex-shrink: 0;
+  width: 38px;
+  background: var(--rp-surface-2);
+  border: 1px solid var(--rp-line);
+  color: var(--rp-effort);
+  border-radius: 6px;
+  font-size: 15px;
+  cursor: pointer;
+}
 #address-results {
   list-style: none;
   margin: 4px 0 0;
