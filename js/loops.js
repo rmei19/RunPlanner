@@ -272,37 +272,64 @@ const RPLoops = (() => {
   /**
    * Détecte les allers-retours (leçon #4) : chevauchement global ET local.
    */
+  /**
+   * Détecte les portions en aller-retour ET retourne leurs bornes précises
+   * (index de début/fin dans `coords`), pas seulement un ratio global —
+   * indispensable pour permettre à l'utilisateur de sélectionner et tronquer
+   * une portion précise plutôt que de simplement être averti qu'il y en a
+   * quelque part sur le tracé.
+   */
+  function findOverlapSegments(coords, thresholdM = 15, minGapPoints = 3) {
+    const segments = [];
+    let i = 0;
+    while (i < coords.length - minGapPoints) {
+      let matchJ = -1;
+      for (let j = i + minGapPoints; j < coords.length; j++) {
+        const d = RPRouting.haversine(
+          { lat: coords[i][0], lon: coords[i][1] },
+          { lat: coords[j][0], lon: coords[j][1] }
+        );
+        if (d < thresholdM) { matchJ = j; break; }
+      }
+      if (matchJ !== -1) {
+        const removedDistanceM = RPRouting.polylineLength(coords.slice(i, matchJ + 1));
+        segments.push({ startIndex: i, endIndex: matchJ, removedDistanceM });
+        i = matchJ + 1; // reprend après ce tronçon, évite les chevauchements de détection
+      } else {
+        i++;
+      }
+    }
+    return segments;
+  }
+
   function validateAndFlag(result) {
     const coords = result.coords;
-    const visited = [];
-    let overlapM = 0;
-    let localOverlapFlags = 0;
+    // Coût en O(n²) : sur un tracé anormalement long (plusieurs milliers de
+    // points), on se contente du signal global sans chercher les bornes
+    // précises, pour rester réactif.
+    const segments = coords.length <= 2000 ? findOverlapSegments(coords) : [];
+    const overlapM = segments.reduce((sum, s) => sum + s.removedDistanceM, 0);
 
-    for (let i = 1; i < coords.length; i++) {
-      const a = { lat: coords[i - 1][0], lon: coords[i - 1][1] };
-      const b = { lat: coords[i][0], lon: coords[i][1] };
-      const segDist = RPRouting.haversine(a, b);
-
-      let overlappedHere = false;
-      for (const v of visited) {
-        const d = RPRouting.haversine(a, v);
-        if (d < 15) { overlappedHere = true; break; }
-      }
-      if (overlappedHere) {
-        overlapM += segDist;
-        localOverlapFlags++;
-      }
-      visited.push(a);
-    }
-
+    result.overlapSegments = segments;
     const overlapRatio = result.distanceM > 0 ? overlapM / result.distanceM : 0;
     result.overlapRatio = overlapRatio;
-    result.hasSignificantOverlap = overlapRatio > 0.15 || localOverlapFlags > 3;
+    result.hasSignificantOverlap = overlapRatio > 0.15 || segments.length > 3;
     return result;
+  }
+
+  /** Ré-exécute la détection de chevauchement après une troncature manuelle
+   *  (voir ui.js), et met à jour l'écart vs cible si une cible existait. */
+  function revalidate(result) {
+    const validated = validateAndFlag(result);
+    if (result.targetDistanceM) {
+      validated.deltaPct = Math.round(((validated.distanceM - result.targetDistanceM) / result.targetDistanceM) * 100);
+    }
+    return validated;
   }
 
   return {
     generateLoop, generateRandomLoop, generateOutAndBack,
-    generatePointToPoint, generateWaypointLoop, destinationPoint, bearingBetween
+    generatePointToPoint, generateWaypointLoop, destinationPoint, bearingBetween,
+    revalidate
   };
 })();

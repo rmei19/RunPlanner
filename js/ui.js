@@ -474,8 +474,7 @@ const RPUi = (() => {
 
   async function generateForCurrentMode() {
     if (!startPoint) throw new Error('Placez un point de départ (recherche, géolocalisation ou clic carte).');
-    RPMap.clearRoute(currentMode);
-    clearSegmentLabels();
+    clearSegmentLabels(); // le nettoyage de la carte se fait maintenant dans applyAndRenderResult()
 
     const subMode = document.querySelector(`.rp-mode-panel[data-for-mode="${currentMode}"] .rp-submode.rp-active`)?.dataset.submode || 'boucle';
     const distanceKm = parseFloat(document.getElementById(`${currentMode}-distance`)?.value || '5');
@@ -512,9 +511,19 @@ const RPUi = (() => {
     }
 
     if (!result) return;
+    applyAndRenderResult(result);
+  }
+
+  /** Point d'entrée unique pour afficher un résultat — utilisé après une
+   *  génération, et après une troncature manuelle de portion en aller-retour
+   *  (voir truncateOverlapSegment), pour ne pas dupliquer la logique
+   *  d'affichage entre les deux cas. */
+  function applyAndRenderResult(result) {
     lastResult = result;
     lastSegments = result.segments || null;
+    RPMap.clearRoute(currentMode);
     drawResult(result);
+    renderOverlapHighlights(result);
     renderSummary(result);
   }
 
@@ -599,6 +608,72 @@ const RPUi = (() => {
     L.polyline(latlngs, { color, weight, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(layer);
   }
 
+  /**
+   * Met en surbrillance (violet, tirets) les portions en aller-retour
+   * détectées et les rend tapables pour proposer de les tronquer — sauf sur
+   * un aller-retour VOLONTAIRE (mode Aller-retour), où la totalité du tracé
+   * est par nature un aller-retour et ne doit pas être signalée comme un
+   * défaut.
+   */
+  function renderOverlapHighlights(result) {
+    if (result.isIntentionalOutAndBack) return;
+    const segments = result.overlapSegments || [];
+    if (segments.length === 0) return;
+    const layer = RPMap.getRouteLayer(currentMode);
+
+    segments.forEach(seg => {
+      const latlngs = result.coords.slice(seg.startIndex, seg.endIndex + 1).map(c => [c[0], c[1]]);
+      if (latlngs.length < 2) return;
+      const highlight = L.polyline(latlngs, {
+        color: '#B026FF', weight: 6, opacity: 0.65, dashArray: '2,10', lineCap: 'round'
+      }).addTo(layer);
+      highlight.bindTooltip(`Aller-retour (-${Math.round(seg.removedDistanceM)} m) — appuyez pour tronquer`, { sticky: true });
+      highlight.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        showTruncatePopup(seg, e.latlng);
+      });
+    });
+  }
+
+  function showTruncatePopup(seg, latlng) {
+    const map = RPMap.getMap();
+    const wrap = document.createElement('div');
+    wrap.className = 'rp-context-menu';
+
+    const info = document.createElement('p');
+    info.className = 'rp-hint';
+    info.style.margin = '0 0 6px';
+    info.textContent = `Portion en aller-retour : -${Math.round(seg.removedDistanceM)} m si retirée.`;
+    wrap.appendChild(info);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '✂️ Tronquer ce tronçon';
+    btn.addEventListener('click', () => {
+      truncateOverlapSegment(seg);
+      map.closePopup();
+    });
+    wrap.appendChild(btn);
+
+    L.popup({ closeButton: true, className: 'rp-context-popup', minWidth: 200 })
+      .setLatLng(latlng).setContent(wrap).openOn(map);
+  }
+
+  /** Retire la portion [startIndex..endIndex] du tracé actuel (garde le
+   *  point de départ du tronçon, saute directement à ce qui suit sa fin),
+   *  recalcule la distance et réaffiche — y compris une éventuelle nouvelle
+   *  détection de chevauchement sur ce qu'il reste. */
+  function truncateOverlapSegment(seg) {
+    if (!lastResult) return;
+    const coords = lastResult.coords;
+    const newCoords = [...coords.slice(0, seg.startIndex + 1), ...coords.slice(seg.endIndex + 1)];
+    lastResult.coords = newCoords;
+    lastResult.distanceM = RPRouting.polylineLength(newCoords);
+    const revalidated = RPLoops.revalidate(lastResult);
+    applyAndRenderResult(revalidated);
+    RPDiag.log('info', `Tronçon en aller-retour tronqué (-${Math.round(seg.removedDistanceM)} m).`);
+  }
+
   /** Étiquettes km, style "bib" (marqueur de dossard), tous les kilomètres. */
   function renderKmLabels(coords, layer) {
     let cum = 0, nextKm = 1;
@@ -659,7 +734,7 @@ const RPUi = (() => {
         <span class="rp-summary-figure">${km} <small>km</small></span>
         <span class="rp-summary-sub">≈ ${dur} à ${currentPaceMinPerKm()}/km (estimation) · source : ${result.source || 'segments composés'}</span>
         ${result.deltaPct != null ? `<span class="rp-summary-delta">${result.deltaPct > 0 ? '+' : ''}${result.deltaPct}% vs cible</span>` : ''}
-        ${result.hasSignificantOverlap ? `<span class="rp-summary-warn">⚠️ Réseau routier peu maillé ici : portion en aller-retour malgré plusieurs tentatives.</span>` : ''}
+        ${result.hasSignificantOverlap && !result.isIntentionalOutAndBack ? `<span class="rp-summary-warn">⚠️ Portion(s) en aller-retour détectée(s) — appuyez sur le tracé en tirets violets sur la carte pour les tronquer.</span>` : ''}
       </div>`;
     el.hidden = false;
     renderElevationProfile(result.coords);
