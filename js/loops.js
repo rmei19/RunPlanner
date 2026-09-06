@@ -227,22 +227,30 @@ const RPLoops = (() => {
    * simplement ignorés en mode A→B, alors que l'interface permet pourtant
    * d'en ajouter quel que soit le sous-mode actif).
    */
-  async function generatePointToPoint(start, end, targetDistanceM, mode, waypoints = []) {
+  /**
+   * A → B direct, ou avec détours pour allonger jusqu'à une distance cible.
+   * closeLoop=true ajoute un retour au départ après l'arrivée (nouvelle
+   * option "Fermer la boucle").
+   */
+  async function generatePointToPoint(start, end, targetDistanceM, mode, waypoints = [], closeLoop = false) {
     if (waypoints.length > 0) {
-      const result = await RPRouting.route([start, ...waypoints, end], mode);
-      return { ...validateAndFlag(result), kind: 'a-vers-b-points-de-passage' };
+      const points = closeLoop ? [start, ...waypoints, end, start] : [start, ...waypoints, end];
+      const result = await RPRouting.route(points, mode);
+      return { ...validateAndFlag(result), kind: closeLoop ? 'a-vers-b-points-de-passage-boucle' : 'a-vers-b-points-de-passage' };
     }
 
-    const direct = await RPRouting.route([start, end], mode);
+    const directPoints = closeLoop ? [start, end, start] : [start, end];
+    const direct = await RPRouting.route(directPoints, mode);
     if (!targetDistanceM || direct.distanceM >= targetDistanceM * 0.95) {
-      return { ...direct, kind: 'a-vers-b' };
+      return { ...direct, kind: closeLoop ? 'a-vers-b-boucle' : 'a-vers-b' };
     }
     const mid = { lat: (start.lat + end.lat) / 2, lon: (start.lon + end.lon) / 2 };
     const bearingDirect = bearingBetween(start, end);
     const remainingM = targetDistanceM - direct.distanceM;
     const detourOffset = destinationPoint(mid.lat, mid.lon, bearingDirect + 90, remainingM / (2 * CIRCUITY));
-    const withDetour = await RPRouting.route([start, detourOffset, end], mode);
-    return { ...withDetour, kind: 'a-vers-b-detour' };
+    const detourPoints = closeLoop ? [start, detourOffset, end, start] : [start, detourOffset, end];
+    const withDetour = await RPRouting.route(detourPoints, mode);
+    return { ...withDetour, kind: closeLoop ? 'a-vers-b-detour-boucle' : 'a-vers-b-detour' };
   }
 
   /** Boucle par points de passage explicites (déjà géocodés), fermée sur le départ. */

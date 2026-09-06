@@ -167,6 +167,19 @@ const RPUi = (() => {
     }
   }
 
+  /** Case "Fermer la boucle" : une par mode (route/chemins), lue selon le mode actif. */
+  function closeLoopCheckbox() {
+    return document.getElementById(currentMode === 'chemins' ? 'close-loop-chemins' : 'close-loop-route');
+  }
+  function isCloseLoopEnabled() {
+    return !!closeLoopCheckbox()?.checked;
+  }
+  function setCloseLoopEnabled(value) {
+    const cb = closeLoopCheckbox();
+    if (cb) cb.checked = value;
+    RPDiag.log('info', `Fermer la boucle : ${value ? 'activée' : 'désactivée'}.`);
+  }
+
   /** Les champs "Distance cible" de Route et Chemins restent synchronisés :
    *  avant, changer d'onglet remettait la valeur par défaut du mode visé au
    *  lieu de garder la distance déjà saisie. */
@@ -237,16 +250,10 @@ const RPUi = (() => {
       }
     });
 
-    document.getElementById('locate-me-btn')?.addEventListener('click', () => {
-      RPDiag.log('info', 'Nouvelle tentative de géolocalisation demandée.');
-      RPMap.locateMe();
-    });
-
-    // Icône d'accès rapide dans la barre du haut, à côté des réglages —
-    // même action que le bouton "Me localiser" du volet, mais accessible
-    // sans avoir à ouvrir/faire défiler le volet.
+    // Seule icône d'accès à la géolocalisation désormais (barre du haut,
+    // à côté des réglages) — le bouton "Me localiser" du volet a été retiré.
     document.getElementById('locate-topbar-btn')?.addEventListener('click', () => {
-      RPDiag.log('info', 'Nouvelle tentative de géolocalisation demandée (icône barre du haut).');
+      RPDiag.log('info', 'Nouvelle tentative de géolocalisation demandée.');
       RPMap.locateMe();
     });
   }
@@ -296,6 +303,12 @@ const RPUi = (() => {
     if (existingIdx !== -1) {
       options.push({ label: '✕ Retirer ce point de passage', action: () => removeWaypointAt(existingIdx) });
     }
+    // Accessible depuis n'importe où sur la carte (pas besoin de viser le
+    // départ) : bascule l'option "Fermer la boucle" du mode A→B actif.
+    options.push({
+      label: `🔁 Fermer la boucle : ${isCloseLoopEnabled() ? 'activée ✓' : 'désactivée'}`,
+      action: () => setCloseLoopEnabled(!isCloseLoopEnabled())
+    });
 
     options.forEach(opt => {
       const btn = document.createElement('button');
@@ -328,6 +341,14 @@ const RPUi = (() => {
       addOrMoveMarker('start', point, '🏁 Départ', '#35D4A7');
       updateAddressField('address-search', point, label);
     } else if (target === 'end') {
+      // Si une arrivée était déjà placée, elle devient le dernier point de
+      // passage plutôt que d'être simplement remplacée et perdue — permet
+      // de construire un parcours à étapes en déplaçant successivement
+      // l'arrivée vers l'avant.
+      if (endPoint) {
+        const oldLabel = document.getElementById('address-search-end')?.value || null;
+        addWaypoint(endPoint, oldLabel);
+      }
       endPoint = point;
       addOrMoveMarker('end', point, '🏁 Arrivée', '#FF5A3C');
       updateAddressField('address-search-end', point, label);
@@ -464,14 +485,22 @@ const RPUi = (() => {
     if (currentMode === 'exercices') {
       result = await generateExercise();
     } else if (subMode === 'boucle') {
-      result = await RPLoops.generateLoop(startPoint, targetM, currentMode);
+      // Si des points de passage ont été placés, ils priment sur la
+      // génération aléatoire : avant, "Boucle" et "Boucle aléatoire"
+      // ignoraient purement et simplement tout point de passage, quel que
+      // soit le nombre déjà ajouté sur la carte.
+      result = waypoints.length > 0
+        ? await RPLoops.generateWaypointLoop([startPoint, ...waypoints.map(w => w.point)], currentMode)
+        : await RPLoops.generateLoop(startPoint, targetM, currentMode);
     } else if (subMode === 'boucle-aleatoire') {
-      result = await RPLoops.generateRandomLoop(startPoint, targetM, currentMode);
+      result = waypoints.length > 0
+        ? await RPLoops.generateWaypointLoop([startPoint, ...waypoints.map(w => w.point)], currentMode)
+        : await RPLoops.generateRandomLoop(startPoint, targetM, currentMode);
     } else if (subMode === 'aller-retour') {
       result = await RPLoops.generateOutAndBack(startPoint, targetM, currentMode, endPoint);
     } else if (subMode === 'a-vers-b') {
       if (!endPoint) throw new Error('Placez un point d\'arrivée pour le mode Aller A→B.');
-      result = await RPLoops.generatePointToPoint(startPoint, endPoint, targetM, currentMode, waypoints.map(w => w.point));
+      result = await RPLoops.generatePointToPoint(startPoint, endPoint, targetM, currentMode, waypoints.map(w => w.point), isCloseLoopEnabled());
     } else if (subMode === 'points-de-passage') {
       if (waypoints.length < 1) throw new Error('Ajoutez au moins un point de passage.');
       result = await RPLoops.generateWaypointLoop([startPoint, ...waypoints.map(w => w.point)], currentMode);

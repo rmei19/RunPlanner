@@ -252,13 +252,6 @@ body {
 }
 #address-results li:hover { background: var(--rp-surface-2); }
 
-.rp-btn-locate {
-  width: 100%;
-  border-color: var(--rp-recovery);
-  color: var(--rp-recovery);
-  font-weight: 600;
-}
-
 .rp-hint {
   margin: 0;
   font-size: 12px;
@@ -266,6 +259,16 @@ body {
   font-style: italic;
 }
 .rp-hint-warn { color: var(--rp-effort); font-style: normal; }
+
+.rp-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--rp-text);
+  cursor: pointer;
+}
+.rp-checkbox-label input { width: 16px; height: 16px; }
 
 .rp-point-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .rp-btn {

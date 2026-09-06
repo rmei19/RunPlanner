@@ -63,7 +63,6 @@
       <ul id="address-results"></ul>
     </div>
 
-    <button class="rp-btn rp-btn-locate" id="locate-me-btn">📡 Me localiser (GPS / réseau)</button>
     <p id="locate-hint" class="rp-hint rp-hint-warn" hidden></p>
 
     <div class="rp-field">
@@ -103,6 +102,12 @@
         <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
       </div>
       <p class="rp-hint">💡 Aller-retour : rejoint l'arrivée si vous en avez placé une, sinon part à mi-distance de la cible dans une direction aléatoire, puis revient par le même chemin.</p>
+      <div class="rp-subform" data-submode="a-vers-b" hidden>
+        <label class="rp-checkbox-label">
+          <input type="checkbox" id="close-loop-route">
+          🔁 Fermer la boucle (revenir au départ après l'arrivée)
+        </label>
+      </div>
       <div class="rp-field">
         <label for="route-distance">Distance cible (km)</label>
         <input id="route-distance" type="number" min="1" step="0.5" value="5">
@@ -120,6 +125,12 @@
         <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
       </div>
       <p class="rp-hint">💡 Aller-retour : rejoint l'arrivée si vous en avez placé une, sinon part à mi-distance de la cible dans une direction aléatoire, puis revient par le même chemin.</p>
+      <div class="rp-subform" data-submode="a-vers-b" hidden>
+        <label class="rp-checkbox-label">
+          <input type="checkbox" id="close-loop-chemins">
+          🔁 Fermer la boucle (revenir au départ après l'arrivée)
+        </label>
+      </div>
       <div class="rp-field">
         <label for="chemins-distance">Distance cible (km)</label>
         <input id="chemins-distance" type="number" min="1" step="0.5" value="8">
