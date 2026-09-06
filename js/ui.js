@@ -517,16 +517,36 @@ const RPUi = (() => {
     const el = document.getElementById('result-summary');
     if (!el) return;
     const km = (result.distanceM / 1000).toFixed(2);
-    const dur = result.durationS ? formatDuration(result.durationS) : '—';
+    // Ne PAS utiliser result.durationS ici : depuis que le mode Route peut
+    // router via un profil vélo (voir config.js), cette durée serait une
+    // estimation vélo (bien plus rapide qu'à pied) — trompeuse pour une app
+    // de course à pied, quel que soit le profil réellement utilisé en
+    // coulisses. On calcule systématiquement notre propre estimation à une
+    // allure de course par défaut, clairement annoncée comme telle.
+    const dur = formatDuration(estimateRunDurationS(result.distanceM, currentPaceMinPerKm()));
     el.innerHTML = `
       <div class="rp-summary-card">
         <span class="rp-summary-figure">${km} <small>km</small></span>
-        <span class="rp-summary-sub">${dur} · source : ${result.source || 'segments composés'}</span>
+        <span class="rp-summary-sub">≈ ${dur} à ${currentPaceMinPerKm()}/km (estimation) · source : ${result.source || 'segments composés'}</span>
         ${result.deltaPct != null ? `<span class="rp-summary-delta">${result.deltaPct > 0 ? '+' : ''}${result.deltaPct}% vs cible</span>` : ''}
         ${result.hasSignificantOverlap ? `<span class="rp-summary-warn">⚠️ Réseau routier peu maillé ici : portion en aller-retour malgré plusieurs tentatives.</span>` : ''}
       </div>`;
     el.hidden = false;
     renderElevationProfile(result.coords);
+  }
+
+  /** Allure (min/km) : celle du mode Exercices si configurée, sinon 5:30/km par défaut. */
+  function currentPaceMinPerKm() {
+    if (currentMode === 'exercices') {
+      const v = parseFloat(document.getElementById('exo-pace')?.value);
+      if (!isNaN(v) && v > 0) return v;
+    }
+    return 5.5;
+  }
+
+  /** Durée estimée (secondes) à une allure de course donnée (min/km). */
+  function estimateRunDurationS(distanceM, paceMinPerKm) {
+    return (distanceM / 1000) * paceMinPerKm * 60;
   }
 
   // ---------- Profil de dénivelé ----------

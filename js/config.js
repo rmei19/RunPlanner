@@ -3,7 +3,7 @@
  * Responsabilité unique : configuration (aucune logique métier ici).
  */
 
-const RP_VERSION = '0.6.4';
+const RP_VERSION = '0.6.5';
 
 const RP_CONFIG = {
   // -- Fonds de carte --
@@ -59,7 +59,15 @@ const RP_CONFIG = {
       // à ce moment-là, ce qui est attendu pour une clé saisie par l'utilisateur).
       obfuscatedDefaultKey: '', // à renseigner si une clé par défaut doit être livrée
       profiles: {
-        route: 'foot-walking',
+        // v0.6.5 — 'route' utilise un profil VÉLO DE ROUTE plutôt qu'un
+        // profil piéton. Testé et validé avec l'utilisateur : ORS n'offre
+        // plus aucun moyen (avoir_features) de dire à un profil piéton
+        // d'éviter les surfaces non goudronnées (l'option existait, ORS l'a
+        // retirée de son API publique). Un vélo de route, lui, évite déjà
+        // naturellement les chemins/graviers puisqu'il ne peut pas y rouler
+        // confortablement — compromis accepté : peut occasionnellement
+        // emprunter une piste cyclable, ce qui reste praticable à pied.
+        route: 'cycling-road',
         chemins: 'foot-hiking',
         exercices: 'foot-walking'
       }
