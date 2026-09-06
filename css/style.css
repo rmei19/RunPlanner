@@ -81,6 +81,15 @@ body {
   cursor: pointer;
 }
 
+#locate-topbar-btn {
+  background: none;
+  border: 1px solid var(--rp-line);
+  color: var(--rp-text);
+  border-radius: 999px;
+  width: 36px; height: 36px;
+  cursor: pointer;
+}
+
 #theme-toggle {
   background: none;
   border: 1px solid var(--rp-line);

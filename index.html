@@ -39,6 +39,7 @@
 <header id="rp-topbar">
   <h1 id="rp-logo">Run<span>Planner</span></h1>
   <button id="settings-btn" aria-label="Réglages">⚙️</button>
+  <button id="locate-topbar-btn" aria-label="Me localiser">📍</button>
   <button id="theme-toggle" aria-label="Changer de thème">🌓</button>
 </header>
 
@@ -66,6 +67,13 @@
     <p id="locate-hint" class="rp-hint rp-hint-warn" hidden></p>
 
     <div class="rp-field">
+      <label for="address-search-waypoint">Point de passage (facultatif)</label>
+      <input id="address-search-waypoint" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
+      <ul id="address-results-waypoint"></ul>
+      <ul id="waypoint-chips" class="rp-chip-list"></ul>
+    </div>
+
+    <div class="rp-field">
       <label for="address-search-end">Adresse d'arrivée (facultatif)</label>
       <div class="rp-field-with-clear">
         <input id="address-search-end" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
@@ -75,13 +83,6 @@
     </div>
 
     <button class="rp-btn" id="reverse-btn">🔄 Inverser départ / arrivée</button>
-
-    <div class="rp-field">
-      <label for="address-search-waypoint">Point de passage (facultatif)</label>
-      <input id="address-search-waypoint" type="text" placeholder="Rechercher une adresse…" autocomplete="off">
-      <ul id="address-results-waypoint"></ul>
-      <ul id="waypoint-chips" class="rp-chip-list"></ul>
-    </div>
 
     <p class="rp-hint">📍 Appui long sur la carte (ou clic droit) pour placer un point : départ, arrivée, ou point de passage.</p>
 
@@ -94,10 +95,10 @@
     <!-- ===== MODE ROUTE ===== -->
     <section class="rp-mode-panel" data-for-mode="route">
       <div class="rp-submodes">
+        <button class="rp-submode" data-submode="a-vers-b">A → B</button>
         <button class="rp-submode rp-active" data-submode="boucle">Boucle</button>
         <button class="rp-submode" data-submode="boucle-aleatoire">Boucle aléatoire</button>
         <button class="rp-submode" data-submode="aller-retour">Aller-retour</button>
-        <button class="rp-submode" data-submode="a-vers-b">A → B</button>
         <button class="rp-submode" data-submode="points-de-passage">Points de passage</button>
         <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
       </div>
@@ -111,10 +112,10 @@
     <!-- ===== MODE CHEMINS ===== -->
     <section class="rp-mode-panel" data-for-mode="chemins" hidden>
       <div class="rp-submodes">
+        <button class="rp-submode" data-submode="a-vers-b">A → B</button>
         <button class="rp-submode rp-active" data-submode="boucle">Boucle</button>
         <button class="rp-submode" data-submode="boucle-aleatoire">Boucle aléatoire</button>
         <button class="rp-submode" data-submode="aller-retour">Aller-retour</button>
-        <button class="rp-submode" data-submode="a-vers-b">A → B</button>
         <button class="rp-submode" data-submode="points-de-passage">Points de passage</button>
         <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
       </div>

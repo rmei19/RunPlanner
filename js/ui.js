@@ -38,6 +38,7 @@ const RPUi = (() => {
       ['géolocalisation', initGeolocation],
       ['clic sur la carte', initMapClickHandling],
       ['inversion départ/arrivée', initReverseButton],
+      ['synchronisation distance route/chemins', initSharedDistance],
       ['bouton générer', initGenerateButton],
       ['boutons d\'export', initExportButtons],
       ['sous-formulaires exercices', initExerciseSubforms],
@@ -166,6 +167,17 @@ const RPUi = (() => {
     }
   }
 
+  /** Les champs "Distance cible" de Route et Chemins restent synchronisés :
+   *  avant, changer d'onglet remettait la valeur par défaut du mode visé au
+   *  lieu de garder la distance déjà saisie. */
+  function initSharedDistance() {
+    const routeInput = document.getElementById('route-distance');
+    const cheminsInput = document.getElementById('chemins-distance');
+    if (!routeInput || !cheminsInput) return;
+    routeInput.addEventListener('input', () => { cheminsInput.value = routeInput.value; });
+    cheminsInput.addEventListener('input', () => { routeInput.value = cheminsInput.value; });
+  }
+
   function wireAddressField(inputId, resultsId, target) {
     const input = document.getElementById(inputId);
     const results = document.getElementById(resultsId);
@@ -227,6 +239,14 @@ const RPUi = (() => {
 
     document.getElementById('locate-me-btn')?.addEventListener('click', () => {
       RPDiag.log('info', 'Nouvelle tentative de géolocalisation demandée.');
+      RPMap.locateMe();
+    });
+
+    // Icône d'accès rapide dans la barre du haut, à côté des réglages —
+    // même action que le bouton "Me localiser" du volet, mais accessible
+    // sans avoir à ouvrir/faire défiler le volet.
+    document.getElementById('locate-topbar-btn')?.addEventListener('click', () => {
+      RPDiag.log('info', 'Nouvelle tentative de géolocalisation demandée (icône barre du haut).');
       RPMap.locateMe();
     });
   }

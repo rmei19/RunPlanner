@@ -40,13 +40,13 @@ const RPMap = (() => {
     // + tracé clair routes vs chemins" (cf. l'exemple Komoot fourni).
     const hybridOverlay = L.tileLayer(RP_CONFIG.tileLayers.topo.url, {
       ...RP_CONFIG.tileLayers.topo.options,
-      opacity: 0.55
+      opacity: 0.7 // remonté de 0.55 : meilleure distinction routes (traits pleins) vs chemins (tirets)
     });
     const hybrid = L.layerGroup([satellite, hybridOverlay]);
     osm.addTo(map);
 
     L.control.layers(
-      { 'Rues (OSM)': osm, 'Relief (OpenTopoMap)': topo, 'Satellite': satellite, 'Hybride (satellite + routes/chemins)': hybrid },
+      { 'Hybride (satellite + routes/chemins)': hybrid, 'Rues (OSM)': osm, 'Relief (OpenTopoMap)': topo, 'Satellite': satellite },
       {
         'Itinéraire Route': routeLayers.route,
         'Itinéraire Chemins': routeLayers.chemins,
