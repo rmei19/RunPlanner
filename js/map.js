@@ -31,29 +31,27 @@ const RPMap = (() => {
     const osm = L.tileLayer(RP_CONFIG.tileLayers.osm.url, RP_CONFIG.tileLayers.osm.options);
     const topo = L.tileLayer(RP_CONFIG.tileLayers.topo.url, RP_CONFIG.tileLayers.topo.options);
     const satellite = L.tileLayer(RP_CONFIG.tileLayers.satellite.url, RP_CONFIG.tileLayers.satellite.options);
-    // "Hybride" = satellite + OpenTopoMap semi-transparent par-dessus.
-    // Le premier essai (satellite + repères Esri "Boundaries and Places")
-    // n'affichait que des noms de lieux/frontières, pas le réseau
-    // routes/chemins lui-même. OpenTopoMap distingue déjà nativement les
-    // routes (traits pleins) des sentiers/chemins (tirets) — en l'affichant
-    // à 55% d'opacité par-dessus le satellite, on obtient le rendu "satellite
-    // + tracé clair routes vs chemins" (cf. l'exemple Komoot fourni).
-    const hybridOverlay = L.tileLayer(RP_CONFIG.tileLayers.topo.url, {
-      ...RP_CONFIG.tileLayers.topo.options,
-      // v0.8.1 — 0.7 semble avoir été trop élevé (retour : "n'est plus
-      // hybride", ce qui peut vouloir dire soit "on ne voit plus que le
-      // satellite" soit "on ne voit plus que le calque routes/chemins" —
-      // je n'ai pas pu confirmer lequel sans accès à un test en direct).
-      // Réglage plus modéré en attendant un retour terrain.
-      opacity: 0.6
+    // "Hybride" = satellite + calque routes Esri semi-transparent par-dessus.
+    // v0.8.3 — remplace OpenTopoMap (retour terrain : le calque
+    // n'apparaissait pas du tout, satellite pur affiché — probable échec de
+    // chargement silencieux, cf. journal ci-dessous). Ce calque Esri est
+    // spécifiquement conçu pour ce cas d'usage (fond transparent, routes
+    // uniquement) et partage l'infrastructure du satellite, réduisant le
+    // risque qu'un des deux services tombe pendant que l'autre fonctionne.
+    const hybridOverlay = L.tileLayer(RP_CONFIG.tileLayers.roadsOverlay.url, {
+      ...RP_CONFIG.tileLayers.roadsOverlay.options,
+      opacity: 0.85 // calque déjà transparent par nature (juste les routes) : peut se permettre plus d'opacité qu'un fond topo complet
     });
     const hybrid = L.layerGroup([satellite, hybridOverlay]);
-    // Si les tuiles OpenTopoMap échouent à charger (limite de leur service
-    // public, gratuit et à quota restreint), le calque redevient de fait un
-    // satellite pur sans qu'aucune erreur ne soit visible à l'écran — ce
-    // journal permettra de vérifier si c'est bien la cause la prochaine fois.
+    // Traçabilité complète (succès ET échec) pour trancher définitivement la
+    // prochaine fois si le calque se charge ou non — avant, seul l'échec
+    // était tracé, impossible de distinguer "aucune requête n'a été faite"
+    // de "toutes les requêtes ont échoué".
+    let hybridTileOk = 0, hybridTileFail = 0;
+    hybridOverlay.on('tileload', () => { hybridTileOk++; });
     hybridOverlay.on('tileerror', () => {
-      RPDiag.log('warn', 'Tuile OpenTopoMap (fond Hybride) en échec de chargement.');
+      hybridTileFail++;
+      RPDiag.log('warn', `Tuile routes (fond Hybride) en échec de chargement (${hybridTileFail} échec(s), ${hybridTileOk} succès).`);
     });
     osm.addTo(map);
 

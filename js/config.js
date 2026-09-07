@@ -3,7 +3,7 @@
  * Responsabilité unique : configuration (aucune logique métier ici).
  */
 
-const RP_VERSION = '0.8.2';
+const RP_VERSION = '0.8.3';
 
 const RP_CONFIG = {
   // -- Fonds de carte --
@@ -36,6 +36,19 @@ const RP_CONFIG = {
     // "repères" serait utile.
     satelliteLabels: {
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      options: {
+        maxZoom: 19,
+        attribution: 'Esri'
+      }
+    },
+    // v0.8.3 — calque "routes uniquement" (fond transparent), conçu par Esri
+    // spécifiquement pour être superposé à leur imagerie satellite (même
+    // infrastructure que `satellite` ci-dessus). Remplace OpenTopoMap comme
+    // source du fond Hybride : servir les deux calques (satellite + routes)
+    // depuis le même fournisseur réduit le risque qu'un des deux échoue
+    // silencieusement pendant que l'autre fonctionne.
+    roadsOverlay: {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
       options: {
         maxZoom: 19,
         attribution: 'Esri'
