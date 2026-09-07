@@ -40,9 +40,21 @@ const RPMap = (() => {
     // + tracé clair routes vs chemins" (cf. l'exemple Komoot fourni).
     const hybridOverlay = L.tileLayer(RP_CONFIG.tileLayers.topo.url, {
       ...RP_CONFIG.tileLayers.topo.options,
-      opacity: 0.7 // remonté de 0.55 : meilleure distinction routes (traits pleins) vs chemins (tirets)
+      // v0.8.1 — 0.7 semble avoir été trop élevé (retour : "n'est plus
+      // hybride", ce qui peut vouloir dire soit "on ne voit plus que le
+      // satellite" soit "on ne voit plus que le calque routes/chemins" —
+      // je n'ai pas pu confirmer lequel sans accès à un test en direct).
+      // Réglage plus modéré en attendant un retour terrain.
+      opacity: 0.6
     });
     const hybrid = L.layerGroup([satellite, hybridOverlay]);
+    // Si les tuiles OpenTopoMap échouent à charger (limite de leur service
+    // public, gratuit et à quota restreint), le calque redevient de fait un
+    // satellite pur sans qu'aucune erreur ne soit visible à l'écran — ce
+    // journal permettra de vérifier si c'est bien la cause la prochaine fois.
+    hybridOverlay.on('tileerror', () => {
+      RPDiag.log('warn', 'Tuile OpenTopoMap (fond Hybride) en échec de chargement.');
+    });
     osm.addTo(map);
 
     L.control.layers(

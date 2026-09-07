@@ -567,7 +567,6 @@ const RPUi = (() => {
   // ---------- Rendu carte ----------
   function drawResult(result) {
     const layer = RPMap.getRouteLayer(currentMode);
-    const latlngs = result.coords.map(c => [c[0], c[1]]);
 
     if (result.segments && result.segments.length) {
       result.segments.forEach(seg => {
@@ -582,6 +581,12 @@ const RPUi = (() => {
       // Le mode Route utilisait un vert menthe qui se fondait dans les zones
       // vertes (forêts/parcs) des fonds de carte OSM — remplacé par un bleu
       // vif, plus contrasté sur la quasi-totalité des fonds de carte.
+      // result.coords n'existe QUE dans cette branche (les résultats
+      // d'exercices n'ont pas de coords au niveau racine, seulement dans
+      // leurs segments) — avant, ce .map() était appelé inconditionnellement
+      // en haut de la fonction, plantant systématiquement pour tout type
+      // d'exercice avec "Cannot read properties of undefined (reading 'map')".
+      const latlngs = result.coords.map(c => [c[0], c[1]]);
       const color = currentMode === 'chemins' ? '#E8C15A' : currentMode === 'exercices' ? '#FF5A3C' : '#2F7DFF';
       drawLineWithCasing(latlngs, color, layer);
       renderKmLabels(result.coords, layer);
@@ -624,14 +629,22 @@ const RPUi = (() => {
     segments.forEach(seg => {
       const latlngs = result.coords.slice(seg.startIndex, seg.endIndex + 1).map(c => [c[0], c[1]]);
       if (latlngs.length < 2) return;
+
+      // Zone de clic invisible bien plus large que le trait visible : une
+      // ligne fine de 6px est difficile à toucher précisément sur mobile —
+      // technique standard pour fiabiliser le tap sur un tracé.
+      const hitArea = L.polyline(latlngs, { color: '#000', weight: 28, opacity: 0 }).addTo(layer);
       const highlight = L.polyline(latlngs, {
         color: '#B026FF', weight: 6, opacity: 0.65, dashArray: '2,10', lineCap: 'round'
       }).addTo(layer);
-      highlight.bindTooltip(`Aller-retour (-${Math.round(seg.removedDistanceM)} m) — appuyez pour tronquer`, { sticky: true });
-      highlight.on('click', (e) => {
+
+      const onTap = (e) => {
         L.DomEvent.stopPropagation(e);
         showTruncatePopup(seg, e.latlng);
-      });
+      };
+      highlight.bindTooltip(`Aller-retour (-${Math.round(seg.removedDistanceM)} m) — appuyez pour tronquer`, { sticky: true });
+      highlight.on('click', onTap);
+      hitArea.on('click', onTap);
     });
   }
 
@@ -792,24 +805,46 @@ const RPUi = (() => {
     if (!profile) { container.hidden = true; return; }
 
     const { points, gain, loss } = profile;
-    const W = 300, H = 90, PAD = 4;
+    // Marges augmentées pour laisser la place aux libellés d'échelle
+    // (altitude à gauche, distance en bas) — demandés par l'utilisateur, le
+    // graphique n'affichait auparavant aucun repère chiffré sur les axes.
+    const W = 300, H = 100, PAD_LEFT = 30, PAD_RIGHT = 6, PAD_TOP = 10, PAD_BOTTOM = 14;
     const maxD = points[points.length - 1].d || 1;
     const eles = points.map(p => p.ele);
     let minE = Math.min(...eles), maxE = Math.max(...eles);
     if (maxE - minE < 10) { const mid = (maxE + minE) / 2; minE = mid - 5; maxE = mid + 5; } // évite un graphe plat écrasé
 
-    const x = d => PAD + (d / maxD) * (W - 2 * PAD);
-    const y = ele => H - PAD - ((ele - minE) / (maxE - minE)) * (H - 2 * PAD);
+    const plotW = W - PAD_LEFT - PAD_RIGHT;
+    const plotH = H - PAD_TOP - PAD_BOTTOM;
+    const x = d => PAD_LEFT + (d / maxD) * plotW;
+    const y = ele => PAD_TOP + plotH - ((ele - minE) / (maxE - minE)) * plotH;
 
     const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.d).toFixed(1)},${y(p.ele).toFixed(1)}`).join(' ');
-    const areaPath = `${linePath} L${x(points[points.length - 1].d).toFixed(1)},${H - PAD} L${x(0).toFixed(1)},${H - PAD} Z`;
+    const areaPath = `${linePath} L${x(points[points.length - 1].d).toFixed(1)},${PAD_TOP + plotH} L${x(0).toFixed(1)},${PAD_TOP + plotH} Z`;
+    const midE = (minE + maxE) / 2;
+    const midD = maxD / 2;
 
     svgHost.innerHTML = `
-      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" role="img" aria-label="Profil de dénivelé">
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="Profil de dénivelé">
+        <!-- Repères horizontaux (échelle d'altitude) -->
+        <line x1="${PAD_LEFT}" y1="${y(maxE).toFixed(1)}" x2="${W - PAD_RIGHT}" y2="${y(maxE).toFixed(1)}" stroke="var(--rp-line)" stroke-width="1"/>
+        <line x1="${PAD_LEFT}" y1="${y(midE).toFixed(1)}" x2="${W - PAD_RIGHT}" y2="${y(midE).toFixed(1)}" stroke="var(--rp-line)" stroke-width="1" stroke-dasharray="2,3"/>
+        <line x1="${PAD_LEFT}" y1="${y(minE).toFixed(1)}" x2="${W - PAD_RIGHT}" y2="${y(minE).toFixed(1)}" stroke="var(--rp-line)" stroke-width="1"/>
+
         <path d="${areaPath}" fill="var(--rp-recovery)" opacity="0.18"></path>
         <path d="${linePath}" fill="none" stroke="var(--rp-recovery)" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+
+        <!-- Échelle d'altitude (axe gauche) -->
+        <text x="2" y="${(y(maxE) + 3).toFixed(1)}" font-size="8" fill="var(--rp-text-dim)">${Math.round(maxE)} m</text>
+        <text x="2" y="${(y(midE) + 3).toFixed(1)}" font-size="8" fill="var(--rp-text-dim)">${Math.round(midE)} m</text>
+        <text x="2" y="${(y(minE) + 3).toFixed(1)}" font-size="8" fill="var(--rp-text-dim)">${Math.round(minE)} m</text>
+
+        <!-- Échelle de distance (axe bas) -->
+        <text x="${PAD_LEFT}" y="${H - 2}" font-size="8" fill="var(--rp-text-dim)" text-anchor="start">0 km</text>
+        <text x="${x(midD).toFixed(1)}" y="${H - 2}" font-size="8" fill="var(--rp-text-dim)" text-anchor="middle">${midD.toFixed(1)} km</text>
+        <text x="${W - PAD_RIGHT}" y="${H - 2}" font-size="8" fill="var(--rp-text-dim)" text-anchor="end">${maxD.toFixed(1)} km</text>
       </svg>`;
-    if (stats) stats.textContent = `D+ ${gain} m · D- ${loss} m · alt. ${Math.round(minE)}–${Math.round(maxE)} m`;
+    if (stats) stats.textContent = `D+ ${gain} m · D- ${loss} m`;
     container.hidden = false;
   }
 

@@ -278,8 +278,21 @@ const RPLoops = (() => {
    * indispensable pour permettre à l'utilisateur de sélectionner et tronquer
    * une portion précise plutôt que de simplement être averti qu'il y en a
    * quelque part sur le tracé.
+   *
+   * v0.8.1 — correction d'un bug de conception important : la version
+   * précédente considérait que deux points proches l'un de l'autre
+   * signifiaient un aller-retour, quel que soit le chemin entre les deux.
+   * Or TOUTE boucle fermée revient forcément près de son propre point de
+   * départ — ce simple critère de proximité capturait donc systématiquement
+   * la totalité du tracé comme un unique "chevauchement" géant (visible à
+   * l'écran : tout le trajet en violet, y compris sans aucun vrai
+   * aller-retour). Un vrai aller-retour n'est pas juste "deux points
+   * proches" : c'est un trajet qui revient sur SES PROPRES PAS, c'est-à-dire
+   * que la portion i→milieu et la portion milieu→j (parcourue à l'envers)
+   * se superposent presque point pour point. C'est ce qu'on vérifie
+   * maintenant avant de retenir un candidat.
    */
-  function findOverlapSegments(coords, thresholdM = 15, minGapPoints = 3) {
+  function findOverlapSegments(coords, thresholdM = 15, minGapPoints = 6) {
     const segments = [];
     let i = 0;
     while (i < coords.length - minGapPoints) {
@@ -289,7 +302,7 @@ const RPLoops = (() => {
           { lat: coords[i][0], lon: coords[i][1] },
           { lat: coords[j][0], lon: coords[j][1] }
         );
-        if (d < thresholdM) { matchJ = j; break; }
+        if (d < thresholdM && isGenuineOutAndBack(coords, i, j, thresholdM)) { matchJ = j; break; }
       }
       if (matchJ !== -1) {
         const removedDistanceM = RPRouting.polylineLength(coords.slice(i, matchJ + 1));
@@ -300,6 +313,26 @@ const RPLoops = (() => {
       }
     }
     return segments;
+  }
+
+  /** Vérifie que la portion i→j est un aller-retour réel : la première
+   *  moitié (i→milieu) et la seconde moitié parcourue à l'envers (j→milieu)
+   *  doivent se superposer sur la majorité des points échantillonnés —
+   *  faute de quoi ce n'est qu'une simple boucle qui repasse près d'un
+   *  ancien point sans revenir sur ses pas. */
+  function isGenuineOutAndBack(coords, i, j, thresholdM) {
+    const half = Math.floor((j - i) / 2);
+    if (half < 2) return false;
+    const step = Math.max(1, Math.floor(half / 8)); // ~8 points échantillonnés
+    let matches = 0, total = 0;
+    for (let k = step; k < half; k += step) {
+      const a = coords[i + k];
+      const b = coords[j - k];
+      const d = RPRouting.haversine({ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] });
+      total++;
+      if (d < thresholdM * 2) matches++; // tolérance un peu plus large que le seuil de base
+    }
+    return total > 0 && (matches / total) > 0.6;
   }
 
   function validateAndFlag(result) {
