@@ -5,7 +5,7 @@
  * est affiché dans le panneau de diagnostic pour vérifier en un coup d'œil
  * que le client a bien reçu la dernière version.
  */
-const RP_SW_VERSION = '0.8.4';
+const RP_SW_VERSION = '0.8.5';
 const CACHE_NAME = `runplanner-cache-v${RP_SW_VERSION}`;
 
 const APP_SHELL = [

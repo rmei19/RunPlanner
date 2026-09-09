@@ -31,37 +31,41 @@ const RPMap = (() => {
     const osm = L.tileLayer(RP_CONFIG.tileLayers.osm.url, RP_CONFIG.tileLayers.osm.options);
     const topo = L.tileLayer(RP_CONFIG.tileLayers.topo.url, RP_CONFIG.tileLayers.topo.options);
     const satellite = L.tileLayer(RP_CONFIG.tileLayers.satellite.url, RP_CONFIG.tileLayers.satellite.options);
-    // "Hybride" = satellite + OpenTopoMap semi-transparent par-dessus.
-    // v0.8.4 — retour sur OpenTopoMap après l'échec du calque Esri (service
-    // legacy déprécié, voir config.js). C'est un fond complet (pas juste des
-    // traits de route transparents comme l'essai Esri), donc une opacité
-    // plus mesurée pour laisser transparaître le satellite en dessous.
-    const hybridOverlay = L.tileLayer(RP_CONFIG.tileLayers.roadsOverlay.url, {
+    // v0.8.5 — abandon de l'approche "fond Hybride" en LayerGroup après trois
+    // échecs de suite (OpenTopoMap, puis Esri, puis OpenTopoMap ajusté) —
+    // dont le dernier retour terrain montrant les tuiles apparaître
+    // brièvement au chargement puis disparaître, signe d'un vrai souci de
+    // superposition/z-index propre à ce montage en LayerGroup-comme-fond,
+    // plutôt que d'un souci de source de tuiles. Plutôt que de continuer à
+    // deviner un réglage, le calque routes/chemins devient un calque À
+    // COCHER (comme "Itinéraire Route" etc. ci-dessous) au lieu d'un fond de
+    // carte spécial — mécanisme déjà éprouvé et fonctionnel dans cette appli.
+    // Cochez "Routes/chemins (repères)" en plus du fond Satellite pour
+    // obtenir le même rendu hybride recherché.
+    const roadsOverlay = L.tileLayer(RP_CONFIG.tileLayers.roadsOverlay.url, {
       ...RP_CONFIG.tileLayers.roadsOverlay.options,
       opacity: 0.6
     });
-    const hybrid = L.layerGroup([satellite, hybridOverlay]);
-    // Traçabilité complète (succès ET échec) pour trancher définitivement la
-    // prochaine fois si le calque se charge ou non — avant, seul l'échec
-    // était tracé, impossible de distinguer "aucune requête n'a été faite"
-    // de "toutes les requêtes ont échoué".
-    let hybridTileOk = 0, hybridTileFail = 0, hybridFirstLoadLogged = false;
-    hybridOverlay.on('tileload', () => {
-      hybridTileOk++;
-      if (!hybridFirstLoadLogged) {
-        hybridFirstLoadLogged = true;
-        RPDiag.log('info', 'Calque routes (fond Hybride) : première tuile chargée avec succès.');
+    // Traçabilité complète (succès ET échec) pour vérifier que le calque se
+    // charge bien, une fois activé.
+    let roadsOverlayOk = 0, roadsOverlayFail = 0, roadsOverlayFirstLoadLogged = false;
+    roadsOverlay.on('tileload', () => {
+      roadsOverlayOk++;
+      if (!roadsOverlayFirstLoadLogged) {
+        roadsOverlayFirstLoadLogged = true;
+        RPDiag.log('info', 'Calque routes/chemins : première tuile chargée avec succès.');
       }
     });
-    hybridOverlay.on('tileerror', () => {
-      hybridTileFail++;
-      RPDiag.log('warn', `Tuile OpenTopoMap (fond Hybride) en échec de chargement (${hybridTileFail} échec(s), ${hybridTileOk} succès).`);
+    roadsOverlay.on('tileerror', () => {
+      roadsOverlayFail++;
+      RPDiag.log('warn', `Tuile routes/chemins en échec de chargement (${roadsOverlayFail} échec(s), ${roadsOverlayOk} succès).`);
     });
     osm.addTo(map);
 
     L.control.layers(
-      { 'Hybride (satellite + routes/chemins)': hybrid, 'Rues (OSM)': osm, 'Relief (OpenTopoMap)': topo, 'Satellite': satellite },
+      { 'Rues (OSM)': osm, 'Relief (OpenTopoMap)': topo, 'Satellite': satellite },
       {
+        'Routes/chemins (repères)': roadsOverlay,
         'Itinéraire Route': routeLayers.route,
         'Itinéraire Chemins': routeLayers.chemins,
         'Itinéraire Exercices': routeLayers.exercices,
