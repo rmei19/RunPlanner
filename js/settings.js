@@ -17,9 +17,11 @@ const RPSettings = (() => {
 
     function refreshStatus() {
       const stored = localStorage.getItem(RP_CONFIG.storageKeys.orsKey);
-      if (status) status.textContent = stored
-        ? '✅ Une clé ORS est configurée : boucles natives ORS activées.'
-        : 'ℹ️ Aucune clé ORS configurée — routage via BRouter uniquement.';
+      if (status) {
+        status.textContent = stored
+          ? '✅ Votre clé ORS personnelle est configurée : boucles natives ORS activées.'
+          : '✅ Clé ORS partagée active (par défaut, intégrée à l\'application) : boucles natives ORS activées. Vous pouvez la remplacer par la vôtre ci-dessous si besoin.';
+      }
       if (keyInput) keyInput.value = stored || '';
     }
 

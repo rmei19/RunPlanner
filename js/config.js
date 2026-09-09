@@ -3,7 +3,7 @@
  * Responsabilité unique : configuration (aucune logique métier ici).
  */
 
-const RP_VERSION = '0.8.5';
+const RP_VERSION = '0.8.6';
 
 const RP_CONFIG = {
   // -- Fonds de carte --
@@ -84,9 +84,16 @@ const RP_CONFIG = {
       baseUrl: 'https://api.openrouteservice.org/v2/directions/',
       // Clé embarquée par défaut : légèrement brouillée (inversion + base64),
       // PAS un vrai chiffrement — juste pour échapper aux scans naïfs de dépôts publics.
+      // Dépôt PUBLIC : n'importe qui lisant ce fichier peut retrouver la clé
+      // en clair via rpDecodeObfuscatedKey() juste en dessous — l'utilisateur
+      // en a été informé et accepte ce compromis (clé gratuite, facilement
+      // régénérable) pour simplifier le partage/test de l'application.
+      // Cette clé ORS gratuite est partagée pour faciliter les tests. Merci
+      // de ne pas en abuser (usage personnel raisonnable) — au-delà, générez
+      // la vôtre gratuitement sur openrouteservice.org.
       // L'utilisateur peut la remplacer via le panneau réglages (stockée en clair côté localStorage
       // à ce moment-là, ce qui est attendu pour une clé saisie par l'utilisateur).
-      obfuscatedDefaultKey: '', // à renseigner si une clé par défaut doit être livrée
+      obfuscatedDefaultKey: 'PTBuSTBZamMxMW1jMTFtSTZJQ2Fpd2lJeE1XWXhFV04wa2pOaVIyTjJrak00QURaaVJEWjFFV1l6UW1OMGt6WXlNbUk2SUNacEpDTGlnRE55WWpaakZETXdBVE14RVRONGNUTzFNVFpqTmpZMUlpT2ljbWN2Snll',
       profiles: {
         // v0.6.5 — 'route' utilise un profil VÉLO DE ROUTE plutôt qu'un
         // profil piéton. Testé et validé avec l'utilisateur : ORS n'offre
