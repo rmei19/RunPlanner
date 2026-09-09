@@ -3,7 +3,7 @@
  * Responsabilité unique : configuration (aucune logique métier ici).
  */
 
-const RP_VERSION = '0.8.3';
+const RP_VERSION = '0.8.4';
 
 const RP_CONFIG = {
   // -- Fonds de carte --
@@ -47,11 +47,27 @@ const RP_CONFIG = {
     // source du fond Hybride : servir les deux calques (satellite + routes)
     // depuis le même fournisseur réduit le risque qu'un des deux échoue
     // silencieusement pendant que l'autre fonctionne.
+    // v0.8.4 — retour sur OpenTopoMap : le calque Esri "routes uniquement"
+    // testé en v0.8.3 s'est révélé être un service LEGACY explicitement
+    // déprécié par Esri depuis 2022 ("in mature support, no longer
+    // updated"), susceptible d'être désactivé sans préavis — confirmé via
+    // leur propre documentation. Le remplacement officiel exige un compte
+    // développeur ArcGIS + une clé API, disproportionné pour un simple
+    // calque décoratif. OpenTopoMap (gratuit, sans clé, déjà utilisé avec
+    // succès comme fond "Relief" autonome dans cette appli) est un choix
+    // plus sûr à long terme.
     roadsOverlay: {
-      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+      url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
       options: {
-        maxZoom: 19,
-        attribution: 'Esri'
+        // maxNativeZoom=17 (résolution réelle des tuiles OpenTopoMap) mais
+        // maxZoom=20 (agrandissement des tuiles de zoom 17 au-delà) : sans
+        // ce réglage, Leaflet cesse purement et simplement d'afficher le
+        // calque dès qu'on zoome plus près que son maxZoom natif — c'est
+        // très probablement ce qui s'est produit lors du premier essai
+        // (zoom rapproché sur un village dans les deux captures reçues).
+        maxNativeZoom: 17,
+        maxZoom: 20,
+        attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)'
       }
     }
   },

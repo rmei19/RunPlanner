@@ -31,27 +31,31 @@ const RPMap = (() => {
     const osm = L.tileLayer(RP_CONFIG.tileLayers.osm.url, RP_CONFIG.tileLayers.osm.options);
     const topo = L.tileLayer(RP_CONFIG.tileLayers.topo.url, RP_CONFIG.tileLayers.topo.options);
     const satellite = L.tileLayer(RP_CONFIG.tileLayers.satellite.url, RP_CONFIG.tileLayers.satellite.options);
-    // "Hybride" = satellite + calque routes Esri semi-transparent par-dessus.
-    // v0.8.3 — remplace OpenTopoMap (retour terrain : le calque
-    // n'apparaissait pas du tout, satellite pur affiché — probable échec de
-    // chargement silencieux, cf. journal ci-dessous). Ce calque Esri est
-    // spécifiquement conçu pour ce cas d'usage (fond transparent, routes
-    // uniquement) et partage l'infrastructure du satellite, réduisant le
-    // risque qu'un des deux services tombe pendant que l'autre fonctionne.
+    // "Hybride" = satellite + OpenTopoMap semi-transparent par-dessus.
+    // v0.8.4 — retour sur OpenTopoMap après l'échec du calque Esri (service
+    // legacy déprécié, voir config.js). C'est un fond complet (pas juste des
+    // traits de route transparents comme l'essai Esri), donc une opacité
+    // plus mesurée pour laisser transparaître le satellite en dessous.
     const hybridOverlay = L.tileLayer(RP_CONFIG.tileLayers.roadsOverlay.url, {
       ...RP_CONFIG.tileLayers.roadsOverlay.options,
-      opacity: 0.85 // calque déjà transparent par nature (juste les routes) : peut se permettre plus d'opacité qu'un fond topo complet
+      opacity: 0.6
     });
     const hybrid = L.layerGroup([satellite, hybridOverlay]);
     // Traçabilité complète (succès ET échec) pour trancher définitivement la
     // prochaine fois si le calque se charge ou non — avant, seul l'échec
     // était tracé, impossible de distinguer "aucune requête n'a été faite"
     // de "toutes les requêtes ont échoué".
-    let hybridTileOk = 0, hybridTileFail = 0;
-    hybridOverlay.on('tileload', () => { hybridTileOk++; });
+    let hybridTileOk = 0, hybridTileFail = 0, hybridFirstLoadLogged = false;
+    hybridOverlay.on('tileload', () => {
+      hybridTileOk++;
+      if (!hybridFirstLoadLogged) {
+        hybridFirstLoadLogged = true;
+        RPDiag.log('info', 'Calque routes (fond Hybride) : première tuile chargée avec succès.');
+      }
+    });
     hybridOverlay.on('tileerror', () => {
       hybridTileFail++;
-      RPDiag.log('warn', `Tuile routes (fond Hybride) en échec de chargement (${hybridTileFail} échec(s), ${hybridTileOk} succès).`);
+      RPDiag.log('warn', `Tuile OpenTopoMap (fond Hybride) en échec de chargement (${hybridTileFail} échec(s), ${hybridTileOk} succès).`);
     });
     osm.addTo(map);
 
