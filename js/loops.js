@@ -254,10 +254,32 @@ const RPLoops = (() => {
   }
 
   /** Boucle par points de passage explicites (déjà géocodés), fermée sur le départ. */
+  /**
+   * Boucle par points de passage explicites (déjà géocodés), fermée sur le
+   * départ. Avec un SEUL point de passage utilisateur (donc waypoints =
+   * [départ, point]), un aller-retour pur est presque inévitable
+   * géométriquement : rien ne force le routeur à emprunter un chemin de
+   * retour différent de l'aller. On insère alors un point de déviation
+   * synthétique (perpendiculaire à l'axe départ→point) pour donner une
+   * vraie forme de boucle plutôt qu'un simple aller-retour — avec 2 points
+   * de passage ou plus, la forme existe déjà naturellement, pas besoin.
+   */
   async function generateWaypointLoop(waypoints, mode) {
     if (waypoints.length < 2) throw new Error('Il faut au moins 2 points de passage.');
-    const closed = [...waypoints, waypoints[0]];
-    const result = await RPRouting.route(closed, mode);
+
+    let routePoints;
+    if (waypoints.length === 2) {
+      const [start, wp] = waypoints;
+      const bearing = bearingBetween(start, wp);
+      const distToWp = RPRouting.haversine(start, wp);
+      const mid = { lat: (start.lat + wp.lat) / 2, lon: (start.lon + wp.lon) / 2 };
+      const detour = destinationPoint(mid.lat, mid.lon, bearing + 90, distToWp * 0.35);
+      routePoints = [start, wp, detour, start];
+    } else {
+      routePoints = [...waypoints, waypoints[0]];
+    }
+
+    const result = await RPRouting.route(routePoints, mode);
     return validateAndFlag(result);
   }
 
