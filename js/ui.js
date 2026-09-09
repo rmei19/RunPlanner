@@ -89,11 +89,72 @@ const RPUi = (() => {
     const handle = document.getElementById('panel-handle');
     const sheet = document.getElementById('rp-sheet');
     if (!handle || !sheet) return;
-    handle.addEventListener('click', () => {
-      const expanded = sheet.classList.toggle('rp-sheet-expanded');
+
+    function setExpanded(expanded) {
+      sheet.classList.toggle('rp-sheet-expanded', expanded);
       handle.setAttribute('aria-expanded', String(expanded));
       try { RPDiag.log('info', `Volet ${expanded ? 'ouvert' : 'fermé'}.`); } catch (_) {}
+    }
+
+    // Tap simple : bascule ouvert/fermé (comportement existant, inchangé).
+    handle.addEventListener('click', () => {
+      if (dragMoved) return; // un glissé vient d'avoir lieu, déjà géré par pointerup ci-dessous
+      setExpanded(!sheet.classList.contains('rp-sheet-expanded'));
     });
+
+    // Glissé tactile : permet de faire monter/descendre le volet à la main,
+    // en plus du tap. Le volet suit le doigt pendant le glissé, puis se
+    // "cale" (snap) sur l'état ouvert ou fermé selon la position relâchée.
+    const EXPANDED_TOP_RATIO = 0.12;
+    const COLLAPSED_TOP_RATIO = 0.82;
+    let dragging = false;
+    let dragMoved = false;
+    let startY = 0;
+    let startTopPx = 0;
+
+    function topRatioToPx(ratio) { return window.innerHeight * ratio; }
+
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      dragging = true;
+      dragMoved = false;
+      startY = e.clientY;
+      const expanded = sheet.classList.contains('rp-sheet-expanded');
+      startTopPx = topRatioToPx(expanded ? EXPANDED_TOP_RATIO : COLLAPSED_TOP_RATIO);
+      sheet.classList.add('rp-sheet-dragging'); // désactive la transition CSS pendant le glissé
+      handle.setPointerCapture(e.pointerId);
+    });
+
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const deltaY = e.clientY - startY;
+      if (Math.abs(deltaY) > 4) dragMoved = true;
+      const minTop = topRatioToPx(EXPANDED_TOP_RATIO);
+      const maxTop = topRatioToPx(COLLAPSED_TOP_RATIO);
+      const newTop = Math.min(maxTop, Math.max(minTop, startTopPx + deltaY));
+      sheet.style.top = `${newTop}px`;
+    });
+
+    function endDrag(e) {
+      if (!dragging) return;
+      dragging = false;
+      sheet.classList.remove('rp-sheet-dragging');
+      sheet.style.top = ''; // repasse sur les valeurs CSS (%), plus fiable au redimensionnement
+      if (dragMoved) {
+        // Se cale sur l'état le plus proche de la position de relâchement.
+        const currentTop = Math.min(
+          topRatioToPx(COLLAPSED_TOP_RATIO),
+          Math.max(topRatioToPx(EXPANDED_TOP_RATIO), startTopPx + (e.clientY - startY))
+        );
+        const midpoint = (topRatioToPx(EXPANDED_TOP_RATIO) + topRatioToPx(COLLAPSED_TOP_RATIO)) / 2;
+        setExpanded(currentTop < midpoint);
+      }
+      // dragMoved reste à true jusqu'au prochain pointerdown : empêche le
+      // 'click' qui suit immédiatement un glissé de rebasculer l'état.
+    }
+
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
   }
 
   // ---------- Recherche d'adresse (3 champs indépendants : départ / arrivée / passage) ----------

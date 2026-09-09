@@ -533,6 +533,9 @@ body {
     padding-bottom: 60px;
   }
   #rp-sheet.rp-sheet-expanded { top: 12%; }
+  /* Désactivée pendant le glissé tactile (voir ui.js) : le volet doit suivre
+     le doigt instantanément, sans le délai de la transition normale. */
+  #rp-sheet.rp-sheet-dragging { transition: none; }
 
   /* Bouton de bascule agrandi (44px de cible tactile min., recommandation
      Apple/Google) — l'ancienne barre de 40×4px était trop petite pour être
@@ -556,6 +559,11 @@ body {
     -webkit-tap-highlight-color: transparent;
     background: var(--rp-surface);
     border-radius: 16px 16px 0 0;
+    /* Empêche le navigateur d'interpréter le geste vertical comme un
+       défilement de page pendant le glissé — sans ça, le geste est
+       intercepté par le scroll natif au lieu de faire monter/descendre le
+       volet. */
+    touch-action: none;
   }
   .rp-handle-bar {
     width: 40px;

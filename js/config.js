@@ -3,7 +3,7 @@
  * Responsabilité unique : configuration (aucune logique métier ici).
  */
 
-const RP_VERSION = '0.8.6';
+const RP_VERSION = '0.8.7';
 
 const RP_CONFIG = {
   // -- Fonds de carte --
