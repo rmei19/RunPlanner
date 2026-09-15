@@ -1,34 +1,35 @@
 /* =========================================================================
    RunPlanner — style.css
-   Identité : piste d'athlétisme la nuit + étiquettes de dossard ("bib tags")
-   pour tout ce qui marque une distance ou un segment d'effort.
+   Identité Suite Tempo, module course : bleu nuit commun + accent corail.
    ========================================================================= */
 
 :root {
-  --rp-bg: #10161A;
-  --rp-surface: #1A2226;
-  --rp-surface-2: #212C31;
-  --rp-text: #F4F1E8;
-  --rp-text-dim: #9CA8A6;
-  --rp-line: rgba(244, 241, 232, 0.10);
-  --rp-effort: #FF5A3C;
-  --rp-recovery: #35D4A7;
-  --rp-route-accent: #E8C15A;
+  color-scheme: dark;
+  --rp-bg: #071824;
+  --rp-surface: #0D2230;
+  --rp-surface-2: #12303F;
+  --rp-text: #F4F7FA;
+  --rp-text-dim: #91A8B7;
+  --rp-line: rgba(145, 168, 183, 0.20);
+  --rp-effort: #FF7168;
+  --rp-recovery: #54D6C8;
+  --rp-route-accent: #F4B84A;
   --rp-shadow: rgba(0, 0, 0, 0.35);
   --rp-radius: 10px;
-  --rp-font-display: 'Bebas Neue', 'Oswald', sans-serif;
+  --rp-font-display: 'Inter', system-ui, sans-serif;
   --rp-font-body: 'Inter', system-ui, sans-serif;
   --rp-font-mono: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 [data-theme="light"] {
-  --rp-bg: #F3F1EA;
+  color-scheme: light;
+  --rp-bg: #F4F7F9;
   --rp-surface: #FFFFFF;
-  --rp-surface-2: #EBE7DC;
-  --rp-text: #171E1A;
-  --rp-text-dim: #5B655F;
-  --rp-line: rgba(23, 30, 26, 0.10);
-  --rp-shadow: rgba(23, 30, 26, 0.12);
+  --rp-surface-2: #E8F0F3;
+  --rp-text: #142832;
+  --rp-text-dim: #607A86;
+  --rp-line: rgba(20, 40, 50, 0.14);
+  --rp-shadow: rgba(20, 40, 50, 0.12);
 }
 
 /* Règle globale indispensable (leçon #2) : sans elle, un élément `hidden` avec
@@ -65,11 +66,25 @@ body {
 #rp-logo {
   font-family: var(--rp-font-display);
   font-size: 26px;
-  letter-spacing: 1px;
-  color: var(--rp-effort);
+  letter-spacing: .2px;
+  color: var(--rp-text);
   margin: 0;
+  display: grid;
+  grid-template-columns: 28px auto;
+  grid-template-rows: auto auto;
+  align-items: center;
 }
-#rp-logo span { color: var(--rp-text); }
+#rp-logo i { grid-row: 1 / 3; width: 23px; height: 23px; border: 5px solid var(--rp-effort); border-right-color: transparent; border-radius: 50%; transform: rotate(-34deg); }
+#rp-logo .rp-suite-name { font-size: 19px; font-weight: 750; line-height: 1.05; }
+#rp-logo small { color: var(--rp-text-dim); font-family: var(--rp-font-body); font-size: 8px; font-weight: 650; letter-spacing: .1em; line-height: 1.15; text-transform: uppercase; }
+
+.rp-suite-menu { position: relative; }
+.rp-suite-menu summary, #theme-select { height: 36px; border: 1px solid var(--rp-line); border-radius: 9px; background: var(--rp-surface); color: var(--rp-text); font: 600 11px var(--rp-font-body); cursor: pointer; }
+.rp-suite-menu summary { display: flex; align-items: center; padding: 0 10px; list-style: none; }
+.rp-suite-menu summary::-webkit-details-marker { display: none; }
+.rp-suite-menu nav { position: absolute; top: calc(100% + 7px); left: 0; z-index: 1600; width: 205px; padding: 7px; display: grid; gap: 3px; border: 1px solid var(--rp-line); border-radius: 11px; background: var(--rp-surface); box-shadow: 0 18px 50px var(--rp-shadow); }
+.rp-suite-menu a { padding: 8px; border-radius: 7px; color: var(--rp-text-dim); font-size: 12px; text-decoration: none; }
+.rp-suite-menu a:hover, .rp-suite-menu a[aria-current="page"] { background: var(--rp-surface-2); color: var(--rp-text); }
 
 #settings-btn {
   margin-left: auto;
@@ -90,14 +105,7 @@ body {
   cursor: pointer;
 }
 
-#theme-toggle {
-  background: none;
-  border: 1px solid var(--rp-line);
-  color: var(--rp-text);
-  border-radius: 999px;
-  width: 36px; height: 36px;
-  cursor: pointer;
-}
+#theme-select { width: 88px; padding: 0 7px; }
 
 /* ---------- Layout principal ---------- */
 #rp-main {
@@ -506,6 +514,16 @@ body {
    jamais entrer en conflit de spécificité avec le CSS desktop.
    ========================================================================= */
 @media (max-width: 767px) {
+  #rp-topbar { gap: 6px; padding: 7px 8px; }
+  #rp-logo { grid-template-columns: 23px auto; }
+  #rp-logo i { width: 19px; height: 19px; border-width: 4px; }
+  #rp-logo .rp-suite-name { font-size: 15px; }
+  #rp-logo small { font-size: 6px; }
+  .rp-suite-menu summary { width: 38px; padding: 0; justify-content: center; font-size: 0; }
+  .rp-suite-menu summary::after { content: '⌘'; font-size: 17px; }
+  .rp-suite-menu nav { position: fixed; top: 52px; left: 8px; }
+  #settings-btn, #locate-topbar-btn { width: 34px; height: 34px; }
+  #theme-select { width: 70px; height: 34px; padding: 0 3px; font-size: 9px; }
   #rp-main { flex-direction: column; }
 
   #rp-sheet {

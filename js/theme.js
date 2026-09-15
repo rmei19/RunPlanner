@@ -1,70 +1,38 @@
-/**
- * theme.js — Bascule thème clair / sombre + suivi du thème système.
- * v0.2.0 — correction : ce module ne doit être initialisé QU'UNE SEULE FOIS
- * (auparavant appelé à la fois depuis app.js et ui.js : deux écouteurs de
- * clic étaient attachés au bouton, donc chaque clic basculait deux fois de
- * suite et le thème ne changeait jamais visuellement). Seul app.js
- * l'initialise désormais.
- *
- * Comportement :
- * - Si l'utilisateur n'a jamais choisi de thème manuellement, l'app suit le
- *   thème système (clair/sombre) et se met à jour automatiquement si celui-ci
- *   change (ex: bascule automatique du soir au matin sur le téléphone).
- * - Dès que l'utilisateur clique sur le bouton, son choix devient explicite
- *   et n'est plus jamais écrasé par un changement système.
- */
-
+/** Thème commun Suite Tempo : système par défaut, clair ou sombre. */
 const RPTheme = (() => {
-  const MANUAL_KEY = 'rp_theme_manual';
+  const STORAGE_KEY = 'tempo-suite-theme';
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
 
-  function systemPrefersLight() {
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+  function normalize(mode) {
+    return ['system', 'light', 'dark'].includes(mode) ? mode : 'system';
   }
 
-  function apply(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    const btn = document.getElementById('theme-toggle');
-    if (btn) {
-      btn.textContent = theme === 'dark' ? '🌙' : '☀️';
-      btn.setAttribute('aria-label', theme === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre');
-    }
+  function apply(mode) {
+    const selected = normalize(mode);
+    const resolved = selected === 'system' ? (media.matches ? 'dark' : 'light') : selected;
+    document.documentElement.dataset.themeMode = selected;
+    document.documentElement.dataset.theme = resolved;
+    const select = document.getElementById('theme-select');
+    if (select) select.value = selected;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = resolved === 'dark' ? '#071824' : '#F4F7F9';
   }
 
   function current() {
-    return document.documentElement.getAttribute('data-theme') || 'dark';
-  }
-
-  function isManual() {
-    return localStorage.getItem(MANUAL_KEY) === '1';
+    return normalize(localStorage.getItem(STORAGE_KEY) || 'system');
   }
 
   function init() {
-    // Applique l'état déjà posé par le script anti-flash du <head>, et met
-    // à jour l'icône du bouton en conséquence.
     apply(current());
-
-    const btn = document.getElementById('theme-toggle');
-    if (btn) {
-      btn.addEventListener('click', () => {
-        const next = current() === 'dark' ? 'light' : 'dark';
-        localStorage.setItem(RP_CONFIG.storageKeys.theme, next);
-        localStorage.setItem(MANUAL_KEY, '1'); // choix explicite : ne plus suivre le système
-        apply(next);
-        try { RPDiag.log('info', `Thème changé manuellement : ${next}.`); } catch (_) {}
-      });
-    }
-
-    // Suivi du thème système tant que l'utilisateur n'a rien choisi lui-même.
-    if (window.matchMedia) {
-      const mq = window.matchMedia('(prefers-color-scheme: light)');
-      const handler = (e) => {
-        if (isManual()) return; // l'utilisateur a fait un choix explicite : on ne le contredit pas
-        apply(e.matches ? 'light' : 'dark');
-      };
-      // Compat anciens navigateurs (addListener) et récents (addEventListener)
-      if (mq.addEventListener) mq.addEventListener('change', handler);
-      else if (mq.addListener) mq.addListener(handler);
-    }
+    const select = document.getElementById('theme-select');
+    if (select) select.addEventListener('change', () => {
+      localStorage.setItem(STORAGE_KEY, select.value);
+      apply(select.value);
+      try { RPDiag.log('info', `Thème choisi : ${select.value}.`); } catch (_) {}
+    });
+    const followSystem = () => { if (current() === 'system') apply('system'); };
+    if (media.addEventListener) media.addEventListener('change', followSystem);
+    else media.addListener(followSystem);
   }
 
   return { init, apply, current };
