@@ -1,6 +1,58 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Sécurité : toujours travailler dans le dossier où se trouve CE script.
+# Cela permet de lancer `bash /chemin/RunPlanner/push.sh` depuis n'importe où
+# sans risquer de publier un autre dépôt par erreur.
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || {
+    echo "❌ Impossible de retrouver le dossier de RunPlanner."
+    exit 1
+}
+
+cd -- "$SCRIPT_DIR" || {
+    echo "❌ Impossible d'entrer dans : $SCRIPT_DIR"
+    exit 1
+}
+
+PROJECT_DIR="$SCRIPT_DIR"
+PROJECT_DEV_INODE="$(stat -c '%d:%i' "$PROJECT_DIR" 2>/dev/null || true)"
+
+# Vérifie que le dossier n'a pas été supprimé/remplacé pendant l'exécution
+# (cas fréquent après extraction/remplacement du dossier depuis Android).
+check_project_dir() {
+    if [ ! -d "$PROJECT_DIR" ]; then
+        echo ""
+        echo "❌ Le dossier RunPlanner a disparu pendant la publication."
+        echo "   Publication annulée avant toute autre opération Git."
+        exit 1
+    fi
+
+    local current_dev_inode
+    current_dev_inode="$(stat -c '%d:%i' "$PROJECT_DIR" 2>/dev/null || true)"
+    if [ -z "$current_dev_inode" ] || [ "$current_dev_inode" != "$PROJECT_DEV_INODE" ]; then
+        echo ""
+        echo "❌ Le dossier RunPlanner a été remplacé pendant la publication."
+        echo "   Ferme cette session, retourne dans le nouveau dossier puis relance push.sh."
+        exit 1
+    fi
+
+    if ! cd -- "$PROJECT_DIR" 2>/dev/null; then
+        echo ""
+        echo "❌ Le répertoire courant n'est plus accessible."
+        echo "   Publication annulée."
+        exit 1
+    fi
+}
+
+# Encapsule TOUTES les commandes Git du script : même les appels déjà
+# présents plus bas bénéficient automatiquement du contrôle.
+git() {
+    check_project_dir
+    command git -C "$PROJECT_DIR" "$@"
+}
 
 echo "=================================================="
 echo "        🚀 PUBLICATION DU PROJET"

@@ -75,7 +75,8 @@ body {
   align-items: center;
 }
 #rp-logo i { grid-row: 1 / 3; width: 23px; height: 23px; border: 5px solid var(--rp-effort); border-right-color: transparent; border-radius: 50%; transform: rotate(-34deg); }
-#rp-logo .rp-suite-name { font-size: 19px; font-weight: 750; line-height: 1.05; }
+#rp-logo .rp-suite-name { font-size: 19px; font-weight: 750; line-height: 1.05; display: inline-flex; align-items: center; gap: 6px; }
+#rp-logo .rp-sport-emoji { font-size: 15px; line-height: 1; transform: translateY(1px); }
 #rp-logo small { color: var(--rp-text-dim); font-family: var(--rp-font-body); font-size: 8px; font-weight: 650; letter-spacing: .1em; line-height: 1.15; text-transform: uppercase; }
 
 .rp-suite-menu { position: relative; }
