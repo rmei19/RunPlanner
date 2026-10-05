@@ -39,6 +39,7 @@ const RPUi = (() => {
       ['clic sur la carte', initMapClickHandling],
       ['inversion départ/arrivée', initReverseButton],
       ['synchronisation distance route/chemins', initSharedDistance],
+      ['orientation des boucles', initLoopOrientation],
       ['bouton générer', initGenerateButton],
       ['boutons d\'export', initExportButtons],
       ['sous-formulaires exercices', initExerciseSubforms],
@@ -252,6 +253,23 @@ const RPUi = (() => {
     cheminsInput.addEventListener('input', () => { routeInput.value = cheminsInput.value; });
   }
 
+  // Orientation de la boucle, mémorisée séparément pour Route et Chemins.
+  function initLoopOrientation() {
+    document.querySelectorAll('.rp-loop-orientation').forEach(group => {
+      group.querySelectorAll('.rp-orientation').forEach(btn => {
+        btn.addEventListener('click', () => {
+          group.querySelectorAll('.rp-orientation').forEach(b => b.classList.remove('rp-active'));
+          btn.classList.add('rp-active');
+        });
+      });
+    });
+  }
+
+  function getLoopOrientation() {
+    const group = document.querySelector(`.rp-mode-panel[data-for-mode="${currentMode}"] .rp-loop-orientation`);
+    return group?.querySelector('.rp-orientation.rp-active')?.dataset.orientation || 'aleatoire';
+  }
+
   function wireAddressField(inputId, resultsId, target) {
     const input = document.getElementById(inputId);
     const results = document.getElementById(resultsId);
@@ -276,6 +294,15 @@ const RPUi = (() => {
                                  // l'impression que le point de passage avait disparu.
             } else {
               setPoint({ lat: m.lat, lon: m.lon }, target, m.label);
+              if (target === 'start') {
+                // Une nouvelle recherche de départ doit réellement remplacer
+                // l'ancien départ, et pas seulement modifier le texte du champ.
+                // On efface le tracé calculé et on recentre immédiatement la carte.
+                RPMap.clearAllRoutes();
+                resetResultDisplay();
+                RPMap.getMap()?.flyTo([m.lat, m.lon], Math.max(RPMap.getMap().getZoom(), 14), { duration: 0.45 });
+                RPDiag.log('info', 'Nouveau lieu de départ sélectionné : ancien tracé effacé et carte recentrée.');
+              }
             }
             results.innerHTML = '';
           });
@@ -401,6 +428,12 @@ const RPUi = (() => {
       startSetAutomatically = false; // un point choisi explicitement n'est plus "automatique"
       addOrMoveMarker('start', point, '🏁 Départ', '#35D4A7');
       updateAddressField('address-search', point, label);
+      // Changer le départ invalide le parcours précédent : sinon l'ancien
+      // tracé restait affiché autour du nouveau marqueur et donnait
+      // l'impression que la recherche n'avait pas remplacé le départ.
+      RPMap.clearAllRoutes();
+      resetResultDisplay();
+      RPMap.getMap()?.flyTo([point.lat, point.lon], Math.max(RPMap.getMap().getZoom(), 14), { duration: 0.45 });
     } else if (target === 'end') {
       // Si une arrivée était déjà placée, elle devient le dernier point de
       // passage plutôt que d'être simplement remplacée et perdue — permet
@@ -551,11 +584,11 @@ const RPUi = (() => {
       // soit le nombre déjà ajouté sur la carte.
       result = waypoints.length > 0
         ? await RPLoops.generateWaypointLoop([startPoint, ...waypoints.map(w => w.point)], currentMode)
-        : await RPLoops.generateLoop(startPoint, targetM, currentMode);
+        : await RPLoops.generateLoop(startPoint, targetM, currentMode, getLoopOrientation());
     } else if (subMode === 'boucle-aleatoire') {
       result = waypoints.length > 0
         ? await RPLoops.generateWaypointLoop([startPoint, ...waypoints.map(w => w.point)], currentMode)
-        : await RPLoops.generateRandomLoop(startPoint, targetM, currentMode);
+        : await RPLoops.generateRandomLoop(startPoint, targetM, currentMode, getLoopOrientation());
     } else if (subMode === 'aller-retour') {
       result = await RPLoops.generateOutAndBack(startPoint, targetM, currentMode, endPoint);
     } else if (subMode === 'a-vers-b') {
@@ -621,8 +654,18 @@ const RPUi = (() => {
         group.querySelectorAll('.rp-subform').forEach(f => {
           f.hidden = f.dataset.submode !== btn.dataset.submode;
         });
+        updateLoopOrientationVisibility(group);
       });
     });
+    document.querySelectorAll('.rp-mode-panel').forEach(updateLoopOrientationVisibility);
+  }
+
+  function updateLoopOrientationVisibility(group) {
+    if (!group) return;
+    const orientation = group.querySelector('.rp-loop-orientation');
+    if (!orientation) return;
+    const subMode = group.querySelector('.rp-submode.rp-active')?.dataset.submode;
+    orientation.hidden = !['boucle', 'boucle-aleatoire'].includes(subMode);
   }
 
   // ---------- Rendu carte ----------

@@ -27,6 +27,24 @@ const RPRouting = (() => {
    * latence et des requêtes inutiles vers un service déjà connu en panne.
    */
   async function route(points, mode, skipOrs = false) {
+    // Pour "Chemins", BRouter/trekking est prioritaire : il est généralement
+    // plus cohérent pour chercher des chemins de randonnée que le profil ORS
+    // lorsqu'un trajet A→B possède aussi une route carrossable proche. ORS
+    // reste le secours. Pour les autres modes, on conserve ORS en premier.
+    if (mode === 'chemins' && !skipOrs) {
+      try {
+        return await routeWithBrouter(points, mode);
+      } catch (e) {
+        RPDiag.log('warn', `BRouter chemins a échoué (${e.message}), bascule vers ORS.`);
+      }
+      try {
+        return await routeWithOrs(points, mode);
+      } catch (e) {
+        RPDiag.log('warn', `ORS chemins a échoué (${e.message}).`);
+      }
+      throw new Error('Les deux moteurs de routage ont échoué pour le mode Chemins.');
+    }
+
     if (!skipOrs) {
       try {
         return await routeWithOrs(points, mode);
@@ -52,6 +70,19 @@ const RPRouting = (() => {
       coordinates: points.map(p => [p.lon, p.lat]),
       elevation: true
     };
+
+    if (mode === 'chemins') {
+      body.options = {
+        // Favorise les itinéraires calmes et les zones vertes quand ORS doit
+        // servir de secours ; il ne s'agit pas d'une interdiction absolue des
+        // routes, car l'API ne permet pas d'interdire toutes les voies routières
+        // pour les profils piétons.
+        profile_params: {
+          weightings: { green: 1, quiet: 1 }
+        },
+        avoid_features: ['ferries', 'fords']
+      };
+    }
 
     const res = await fetch(url, {
       method: 'POST',
@@ -103,6 +134,10 @@ const RPRouting = (() => {
         }
       }
     };
+    if (mode === 'chemins') {
+      body.options.profile_params = { weightings: { green: 1, quiet: 1 } };
+      body.options.avoid_features = ['ferries', 'fords'];
+    }
 
     const res = await fetch(url, {
       method: 'POST',

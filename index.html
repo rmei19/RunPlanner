@@ -42,6 +42,8 @@
       <a aria-current="page" href="./">Parcours course</a>
       <a href="https://rmei19.github.io/RoadPlannerBis/">Parcours vélo</a>
       <a href="https://agendamaisonpersonnelremi.netlify.app/">Agenda Maison</a>
+      <a href="https://dynamic.watch/fr/me#">Indique le chemin</a>
+      <a href="https://rdvenfamillev2.netlify.app/">Planifier un évènement</a>
     </nav>
   </details>
   <button id="settings-btn" aria-label="Réglages">⚙️</button>
@@ -111,6 +113,14 @@
         <button class="rp-submode" data-submode="points-de-passage">Points de passage</button>
         <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
       </div>
+      <div class="rp-loop-orientation" aria-label="Orientation de la boucle">
+        <span class="rp-orientation-label">Orientation</span>
+        <button type="button" class="rp-orientation rp-active" data-orientation="aleatoire" title="Orientation aléatoire">↻</button>
+        <button type="button" class="rp-orientation" data-orientation="nord" title="Boucle orientée nord">N</button>
+        <button type="button" class="rp-orientation" data-orientation="est" title="Boucle orientée est">E</button>
+        <button type="button" class="rp-orientation" data-orientation="sud" title="Boucle orientée sud">S</button>
+        <button type="button" class="rp-orientation" data-orientation="ouest" title="Boucle orientée ouest">O</button>
+      </div>
       <p class="rp-hint">💡 Aller-retour : rejoint l'arrivée si vous en avez placé une, sinon part à mi-distance de la cible dans une direction aléatoire, puis revient par le même chemin.</p>
       <div class="rp-subform" data-submode="a-vers-b" hidden>
         <label class="rp-checkbox-label">
@@ -120,7 +130,7 @@
       </div>
       <div class="rp-field">
         <label for="route-distance">Distance cible (km)</label>
-        <input id="route-distance" type="number" min="1" step="0.5" value="5">
+        <input id="route-distance" type="number" min="1" step="0.5" value="9">
       </div>
     </section>
 
@@ -134,6 +144,14 @@
         <button class="rp-submode" data-submode="points-de-passage">Points de passage</button>
         <button class="rp-submode" data-submode="visite-citadine">Visite citadine</button>
       </div>
+      <div class="rp-loop-orientation" aria-label="Orientation de la boucle">
+        <span class="rp-orientation-label">Orientation</span>
+        <button type="button" class="rp-orientation rp-active" data-orientation="aleatoire" title="Orientation aléatoire">↻</button>
+        <button type="button" class="rp-orientation" data-orientation="nord" title="Boucle orientée nord">N</button>
+        <button type="button" class="rp-orientation" data-orientation="est" title="Boucle orientée est">E</button>
+        <button type="button" class="rp-orientation" data-orientation="sud" title="Boucle orientée sud">S</button>
+        <button type="button" class="rp-orientation" data-orientation="ouest" title="Boucle orientée ouest">O</button>
+      </div>
       <p class="rp-hint">💡 Aller-retour : rejoint l'arrivée si vous en avez placé une, sinon part à mi-distance de la cible dans une direction aléatoire, puis revient par le même chemin.</p>
       <div class="rp-subform" data-submode="a-vers-b" hidden>
         <label class="rp-checkbox-label">
@@ -143,7 +161,7 @@
       </div>
       <div class="rp-field">
         <label for="chemins-distance">Distance cible (km)</label>
-        <input id="chemins-distance" type="number" min="1" step="0.5" value="5">
+        <input id="chemins-distance" type="number" min="1" step="0.5" value="9">
       </div>
     </section>
 
@@ -230,7 +248,7 @@
       <input id="settings-ors-key" type="text" placeholder="Collez votre clé ORS…" autocomplete="off">
     </div>
     <p id="settings-status" class="rp-hint"></p>
-    <p class="rp-hint">🤝 Une clé ORS gratuite est déjà intégrée par défaut, partagée pour faciliter les tests. Merci de ne pas en abuser (usage personnel raisonnable) — au-delà, générez la vôtre gratuitement sur <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a> et renseignez-la ci-dessus.</p>
+    <p class="rp-hint">🤝 Une clé ORS gratuite est déjà intégrée par défaut, partagée pour faciliter les tests. Merci de ne pas en abuser (usage personnel raisonnable) — au-delà, générez la vôtre gratuitement sur <a href="https://openrouteservice.org/dev/#/signup">openrouteservice.org</a> et renseignez-la ci-dessus.</p>
     <p class="rp-hint">Sans clé (ou si la clé partagée est épuisée/invalide), RunPlanner route automatiquement via BRouter (gratuit, sans compte).</p>
     <div class="rp-export-row">
       <button class="rp-btn rp-btn-primary" id="settings-save" type="button">Enregistrer</button>

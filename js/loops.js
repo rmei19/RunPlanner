@@ -69,7 +69,10 @@ const RPLoops = (() => {
 
   /** Score de qualité d'une tentative : plus bas = meilleur. Le chevauchement pèse le plus lourd. */
   function scoreAttempt(r) {
-    return (r.overlapRatio || 0) * 200 + Math.abs(r.deltaPct || 0);
+    // Un vrai aller-retour est beaucoup plus pénalisant qu'un petit écart de
+    // distance : on préfère une boucle légèrement trop courte/longue mais
+    // distincte à une boucle qui repasse sur ses pas.
+    return (r.overlapRatio || 0) * 500 + (r.hasSignificantOverlap ? 120 : 0) + Math.abs(r.deltaPct || 0);
   }
 
   function annotate(result, targetDistanceM) {
@@ -116,11 +119,17 @@ const RPLoops = (() => {
     return validated;
   }
 
-  /** Génère plusieurs tentatives (ORS round-trip puis repli polygone) et garde la meilleure. */
-  async function bestOfAttempts(start, targetDistanceM, mode, fixedVertices, randomizeBearing) {
+  /** Génère plusieurs tentatives et garde la meilleure.
+   * orientation = aleatoire|nord|est|sud|ouest. Les orientations cardinales
+   * utilisent volontairement la construction polygonale afin de contrôler le
+   * cap initial ; l'option round_trip native ORS reste utilisée en aléatoire. */
+  async function bestOfAttempts(start, targetDistanceM, mode, fixedVertices, randomizeBearing, orientation = 'aleatoire') {
     const attempts = [];
     const vertices = fixedVertices || (5 + Math.floor(Math.random() * 4)); // fixé une fois pour tout l'appel
-    let seedBearing = randomizeBearing ? Math.random() * 360 : 0;
+    const orientationBearing = { nord: 0, est: 90, sud: 180, ouest: 270 };
+    const forcedBearing = orientationBearing[orientation];
+    const forcePolygon = Number.isFinite(forcedBearing);
+    let seedBearing = forcePolygon ? forcedBearing : (randomizeBearing ? Math.random() * 360 : 0);
     let shape = makeShape(vertices, seedBearing);
     const initialRadius = (targetDistanceM / CIRCUITY) / (2 * Math.PI);
     const polygonState = { radius: initialRadius };
@@ -130,7 +139,7 @@ const RPLoops = (() => {
 
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       let attempt = null;
-      if (orsAvailable) {
+      if (orsAvailable && !forcePolygon) {
         try {
           attempt = await tryRoundTrip(start, targetDistanceM, mode, Date.now() % 100000 + i, orsState);
         } catch (e) {
@@ -185,13 +194,13 @@ const RPLoops = (() => {
   }
 
   /** Boucle simple. */
-  async function generateLoop(start, targetDistanceM, mode) {
-    return bestOfAttempts(start, targetDistanceM, mode, 6, false);
+  async function generateLoop(start, targetDistanceM, mode, orientation = 'aleatoire') {
+    return bestOfAttempts(start, targetDistanceM, mode, 6, false, orientation);
   }
 
   /** Boucle aléatoire : bearing de départ et nombre de sommets randomisés. */
-  async function generateRandomLoop(start, targetDistanceM, mode) {
-    return bestOfAttempts(start, targetDistanceM, mode, null, true);
+  async function generateRandomLoop(start, targetDistanceM, mode, orientation = 'aleatoire') {
+    return bestOfAttempts(start, targetDistanceM, mode, null, orientation === 'aleatoire', orientation);
   }
 
   /** Aller-retour simple sur un cap donné (ou aléatoire) — l'aller-retour est ICI volontaire. */
@@ -343,18 +352,25 @@ const RPLoops = (() => {
    *  faute de quoi ce n'est qu'une simple boucle qui repasse près d'un
    *  ancien point sans revenir sur ses pas. */
   function isGenuineOutAndBack(coords, i, j, thresholdM) {
-    const half = Math.floor((j - i) / 2);
-    if (half < 2) return false;
-    const step = Math.max(1, Math.floor(half / 8)); // ~8 points échantillonnés
+    const span = j - i;
+    if (span < 8) return false;
+
+    // Échantillonne 10 positions régulièrement espacées dans le temps de
+    // parcours. Cela évite de rater un aller-retour lorsque le routeur
+    // produit beaucoup de points sur l'aller et peu sur le retour (ou inversement).
     let matches = 0, total = 0;
-    for (let k = step; k < half; k += step) {
-      const a = coords[i + k];
-      const b = coords[j - k];
+    const samples = Math.min(10, Math.max(5, Math.floor(span / 4)));
+    for (let n = 1; n < samples; n++) {
+      const ratio = n / samples;
+      const aIdx = Math.round(i + ratio * span * 0.5);
+      const bIdx = Math.round(j - ratio * span * 0.5);
+      const a = coords[aIdx], b = coords[bIdx];
+      if (!a || !b) continue;
       const d = RPRouting.haversine({ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] });
       total++;
-      if (d < thresholdM * 2) matches++; // tolérance un peu plus large que le seuil de base
+      if (d < thresholdM * 2.5) matches++;
     }
-    return total > 0 && (matches / total) > 0.6;
+    return total >= 4 && (matches / total) > 0.55;
   }
 
   function validateAndFlag(result) {

@@ -52,6 +52,37 @@ body {
   overflow: hidden;
 }
 
+
+/* Orientation des boucles — N/E/S/O comme dans RoadPlanner. */
+.rp-loop-orientation {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 7px 0 4px;
+  flex-wrap: wrap;
+}
+.rp-orientation-label {
+  color: var(--rp-text-dim);
+  font-size: 11px;
+  margin-right: 3px;
+}
+.rp-orientation {
+  width: 32px;
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 1px solid var(--rp-line);
+  border-radius: 8px;
+  background: var(--rp-surface-2);
+  color: var(--rp-text);
+  font-weight: 700;
+  cursor: pointer;
+}
+.rp-orientation.rp-active {
+  background: var(--rp-route-accent);
+  color: #142832;
+  border-color: var(--rp-route-accent);
+}
+
 /* ---------- Barre supérieure ---------- */
 #rp-topbar {
   display: flex;
