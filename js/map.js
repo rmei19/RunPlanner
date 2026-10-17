@@ -16,6 +16,7 @@ const RPMap = (() => {
   let poiLayer = L.featureGroup();
   let userLocationMarker = null;
   let userAccuracyCircle = null;
+  let elevationMarker = null;
   let locationCallbacks = [];
   let locationErrorCallbacks = [];
 
@@ -129,6 +130,31 @@ const RPMap = (() => {
 
   function clearAllRoutes() {
     Object.values(routeLayers).forEach(g => g.clearLayers());
+    hideElevationMarker();
+  }
+
+  /** Point blanc synchronisé avec le profil de dénivelé. */
+  function showElevationMarker(latlng, distanceKm, elevationM) {
+    if (!map || !latlng) return;
+    if (!elevationMarker) {
+      elevationMarker = L.circleMarker(latlng, {
+        radius: 7, color: '#20252b', weight: 2.5,
+        fillColor: '#ffffff', fillOpacity: 1,
+        pane: 'markerPane', bubblingMouseEvents: false,
+        interactive: true, className: 'rp-elevation-map-marker'
+      }).addTo(markersLayer);
+    } else {
+      elevationMarker.setLatLng(latlng);
+      if (!markersLayer.hasLayer(elevationMarker)) elevationMarker.addTo(markersLayer);
+    }
+    elevationMarker.setStyle({ radius: 7, color: '#20252b', weight: 2.5, fillColor: '#ffffff', fillOpacity: 1 });
+    elevationMarker.bindTooltip(`${distanceKm.toFixed(2)} km · ${Math.round(elevationM)} m`, {
+      permanent: false, direction: 'top', offset: [0, -7], opacity: 0.95
+    });
+  }
+
+  function hideElevationMarker() {
+    if (elevationMarker && markersLayer.hasLayer(elevationMarker)) markersLayer.removeLayer(elevationMarker);
   }
 
   function getMap() { return map; }
@@ -146,6 +172,7 @@ const RPMap = (() => {
   return {
     init, clearRoute, clearAllRoutes, getMap,
     getRouteLayer, getMarkersLayer, getPoiLayer, fitToLayer,
+    showElevationMarker, hideElevationMarker,
     locateMe, onLocationFound, onLocationError
   };
 })();

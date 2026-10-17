@@ -26,6 +26,7 @@ const RPUi = (() => {
   let waypoints = []; // [{ point:{lat,lon}, marker, label }]
   let lastResult = null;
   let lastSegments = null;
+  let elevationTrackCoords = [];
   // (placingFor supprimé en v0.6.4 : le placement se fait via recherche
   // d'adresse ou appui long / clic droit, plus par simple clic sur la carte.)
   let startSetAutomatically = false;
@@ -906,8 +907,9 @@ const RPUi = (() => {
     if (!container || !svgHost) return;
 
     const profile = computeElevationProfile(coords);
-    if (!profile) { container.hidden = true; return; }
+    if (!profile) { container.hidden = true; elevationTrackCoords = []; RPMap.hideElevationMarker(); return; }
 
+    elevationTrackCoords = coords;
     const { points, gain, loss } = profile;
     // Marges augmentées pour laisser la place aux libellés d'échelle
     // (altitude à gauche, distance en bas) — demandés par l'utilisateur, le
@@ -937,6 +939,9 @@ const RPUi = (() => {
 
         <path d="${areaPath}" fill="var(--rp-recovery)" opacity="0.18"></path>
         <path d="${linePath}" fill="none" stroke="var(--rp-recovery)" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+        <line id="rp-elevation-cursor-line" x1="${PAD_LEFT}" y1="${PAD_TOP}" x2="${PAD_LEFT}" y2="${PAD_TOP + plotH}" stroke="var(--rp-text)" stroke-width="1.5" stroke-dasharray="3,2" opacity="0.8" pointer-events="none"></line>
+        <circle id="rp-elevation-cursor-dot" cx="${PAD_LEFT}" cy="${y(points[0].ele).toFixed(1)}" r="4" fill="#ffffff" stroke="#252a30" stroke-width="1.5" pointer-events="none"></circle>
+        <rect id="rp-elevation-touch-area" x="${PAD_LEFT}" y="${PAD_TOP}" width="${plotW}" height="${plotH}" fill="transparent" style="cursor: crosshair; touch-action: pan-y;"></rect>
 
         <!-- Échelle d'altitude (axe gauche) -->
         <text x="2" y="${(y(maxE) + 3).toFixed(1)}" font-size="8" fill="var(--rp-text-dim)">${Math.round(maxE)} m</text>
@@ -948,9 +953,75 @@ const RPUi = (() => {
         <text x="${x(midD).toFixed(1)}" y="${H - 2}" font-size="8" fill="var(--rp-text-dim)" text-anchor="middle">${midD.toFixed(1)} km</text>
         <text x="${W - PAD_RIGHT}" y="${H - 2}" font-size="8" fill="var(--rp-text-dim)" text-anchor="end">${maxD.toFixed(1)} km</text>
       </svg>`;
-    if (stats) stats.textContent = `D+ ${gain} m · D- ${loss} m`;
+    if (stats) stats.textContent = `D+ ${gain} m · D- ${loss} m · Touchez/glissez sur le profil pour suivre le point sur la carte`;
     container.hidden = false;
+    bindElevationTracking(points, { W, PAD_LEFT, PAD_RIGHT, PAD_TOP, plotH, maxD, minE, maxE, x, y });
   }
+
+  /** Synchronise le doigt sur le profil avec un point blanc sur la carte. */
+  function bindElevationTracking(profilePoints, chart) {
+    const svg = document.querySelector('#elevation-svg-container svg');
+    const touchArea = document.getElementById('rp-elevation-touch-area');
+    const cursorLine = document.getElementById('rp-elevation-cursor-line');
+    const cursorDot = document.getElementById('rp-elevation-cursor-dot');
+    if (!svg || !touchArea || !cursorLine || !cursorDot || !elevationTrackCoords.length) return;
+
+    let lastDistance = 0;
+    const cumulative = [0];
+    for (let i = 1; i < elevationTrackCoords.length; i++) {
+      cumulative.push(cumulative[i - 1] + RPRouting.haversine(
+        { lat: elevationTrackCoords[i - 1][0], lon: elevationTrackCoords[i - 1][1] },
+        { lat: elevationTrackCoords[i][0], lon: elevationTrackCoords[i][1] }
+      ) / 1000);
+    }
+    const total = cumulative[cumulative.length - 1] || 1;
+
+    function updateFromEvent(ev) {
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return;
+      const screenPoint = svg.createSVGPoint(); screenPoint.x = ev.clientX; screenPoint.y = ev.clientY;
+      const local = screenPoint.matrixTransform(matrix.inverse());
+      const clampedX = Math.max(chart.PAD_LEFT, Math.min(chart.W - chart.PAD_RIGHT, local.x));
+      const distance = ((clampedX - chart.PAD_LEFT) / (chart.W - chart.PAD_LEFT - chart.PAD_RIGHT)) * chart.maxD;
+      lastDistance = Math.max(0, Math.min(total, distance));
+
+      let idx = 1;
+      while (idx < cumulative.length - 1 && cumulative[idx] < lastDistance) idx++;
+      const d0 = cumulative[Math.max(0, idx - 1)], d1 = cumulative[idx] ?? d0;
+      const a = elevationTrackCoords[Math.max(0, idx - 1)], b = elevationTrackCoords[idx] || a;
+      const t = d1 > d0 ? Math.max(0, Math.min(1, (lastDistance - d0) / (d1 - d0))) : 0;
+      const lat = a[0] + (b[0] - a[0]) * t;
+      const lon = a[1] + (b[1] - a[1]) * t;
+      const ele = (a[2] || 0) + ((b[2] || 0) - (a[2] || 0)) * t;
+
+      let pIdx = 1;
+      while (pIdx < profilePoints.length - 1 && profilePoints[pIdx].d < lastDistance) pIdx++;
+      const p0 = profilePoints[Math.max(0, pIdx - 1)], p1 = profilePoints[pIdx] || p0;
+      const profileT = p1.d > p0.d ? Math.max(0, Math.min(1, (lastDistance - p0.d) / (p1.d - p0.d))) : 0;
+      const profileEle = p0.ele + (p1.ele - p0.ele) * profileT;
+      const cy = chart.y(profileEle);
+      cursorLine.setAttribute('x1', clampedX); cursorLine.setAttribute('x2', clampedX);
+      cursorDot.setAttribute('cx', clampedX); cursorDot.setAttribute('cy', cy);
+      RPMap.showElevationMarker({ lat, lon }, lastDistance, ele);
+      if (statsForElevation()) statsForElevation().textContent = `D+ ${Math.round(computeElevationProfile(elevationTrackCoords)?.gain || 0)} m · D- ${Math.round(computeElevationProfile(elevationTrackCoords)?.loss || 0)} m · ${lastDistance.toFixed(2)} km · ${Math.round(ele)} m`;
+    }
+
+    function onPointerDown(ev) {
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      touchArea.setPointerCapture?.(ev.pointerId);
+      updateFromEvent(ev);
+      ev.preventDefault();
+    }
+    touchArea.onpointerdown = onPointerDown;
+    touchArea.onpointermove = ev => {
+      if (ev.pointerType === 'mouse' && ev.buttons !== 1) return;
+      if (ev.pointerType !== 'mouse' || ev.buttons === 1) { updateFromEvent(ev); if (ev.cancelable) ev.preventDefault(); }
+    };
+    touchArea.onpointerup = ev => { try { touchArea.releasePointerCapture?.(ev.pointerId); } catch (_) {} };
+    touchArea.onpointercancel = () => {};
+  }
+
+  function statsForElevation() { return document.getElementById('elevation-stats'); }
 
   function formatDuration(seconds) {
     const h = Math.floor(seconds / 3600);
