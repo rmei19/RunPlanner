@@ -524,18 +524,59 @@ const RPUi = (() => {
     waypoints.forEach((w, idx) => {
       const li = document.createElement('li');
       li.className = 'rp-chip';
+      li.draggable = true;
+      li.dataset.waypointIndex = String(idx);
+      li.setAttribute('aria-label', `Point ${idx + 1}, ${w.label}. Utilisez les flèches pour réorganiser.`);
+      const grip = document.createElement('span');
+      grip.className = 'rp-chip-grip';
+      grip.textContent = '⠿';
+      grip.setAttribute('aria-hidden', 'true');
       const text = document.createElement('span');
+      text.className = 'rp-chip-label';
       text.textContent = `${idx + 1}. ${w.label}`;
+      const actions = document.createElement('div');
+      actions.className = 'rp-chip-actions';
+      const moveBtn = (delta, glyph, label, disabled) => {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'rp-chip-move';
+        btn.textContent = glyph; btn.disabled = disabled;
+        btn.setAttribute('aria-label', label);
+        btn.addEventListener('click', () => moveWaypoint(idx, idx + delta));
+        actions.appendChild(btn);
+      };
+      moveBtn(-1, '↑', `Monter le point ${idx + 1}`, idx === 0);
+      moveBtn(1, '↓', `Descendre le point ${idx + 1}`, idx === waypoints.length - 1);
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'rp-chip-remove';
       removeBtn.setAttribute('aria-label', `Retirer le point ${idx + 1}`);
       removeBtn.textContent = '✕';
       removeBtn.addEventListener('click', () => removeWaypointAt(idx));
-      li.appendChild(text);
-      li.appendChild(removeBtn);
+      actions.appendChild(removeBtn);
+      li.append(grip, text, actions);
+      li.addEventListener('dragstart', event => {
+        event.dataTransfer.setData('text/plain', String(idx));
+        event.dataTransfer.effectAllowed = 'move';
+        li.classList.add('rp-chip-dragging');
+      });
+      li.addEventListener('dragend', () => li.classList.remove('rp-chip-dragging'));
+      li.addEventListener('dragover', event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; });
+      li.addEventListener('drop', event => {
+        event.preventDefault();
+        const from = Number(event.dataTransfer.getData('text/plain'));
+        if (Number.isInteger(from)) moveWaypoint(from, idx);
+      });
       list.appendChild(li);
     });
+  }
+
+  function moveWaypoint(from, to) {
+    if (from < 0 || from >= waypoints.length || to < 0 || to >= waypoints.length || from === to) return;
+    const [item] = waypoints.splice(from, 1);
+    waypoints.splice(to, 0, item);
+    renumberWaypoints();
+    renderWaypointChips();
+    RPDiag.log('info', 'Ordre des points de passage modifié.');
   }
 
   const markerRefs = {};

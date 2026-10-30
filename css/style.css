@@ -381,7 +381,12 @@ body {
   padding: 6px 8px;
   font-size: 12px;
 }
-.rp-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-chip .rp-chip-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-chip-grip { color: var(--rp-muted); cursor: grab; font-size: 20px; line-height: 1; user-select: none; }
+.rp-chip-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.rp-chip-move { background: none; border: 1px solid var(--rp-line); color: var(--rp-text); border-radius: 6px; min-width: 28px; height: 28px; cursor: pointer; }
+.rp-chip-move:disabled { opacity: .3; cursor: default; }
+.rp-chip-dragging { opacity: .45; outline: 1px dashed var(--rp-accent); }
 .rp-chip-remove {
   flex-shrink: 0;
   background: none;
