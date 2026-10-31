@@ -325,6 +325,8 @@ const RPLoops = (() => {
    */
   function findOverlapSegments(coords, thresholdM = 15, minGapPoints = 6) {
     const segments = [];
+    const cumulative = [0];
+    for (let k = 1; k < coords.length; k++) cumulative.push(cumulative[k - 1] + RPRouting.haversine({ lat: coords[k - 1][0], lon: coords[k - 1][1] }, { lat: coords[k][0], lon: coords[k][1] }));
     let i = 0;
     while (i < coords.length - minGapPoints) {
       let matchJ = -1;
@@ -333,7 +335,7 @@ const RPLoops = (() => {
           { lat: coords[i][0], lon: coords[i][1] },
           { lat: coords[j][0], lon: coords[j][1] }
         );
-        if (d < thresholdM && isGenuineOutAndBack(coords, i, j, thresholdM)) { matchJ = j; break; }
+        if (d < thresholdM && isGenuineOutAndBack(coords, cumulative, i, j, thresholdM)) { matchJ = j; break; }
       }
       if (matchJ !== -1) {
         const removedDistanceM = RPRouting.polylineLength(coords.slice(i, matchJ + 1));
@@ -351,20 +353,21 @@ const RPLoops = (() => {
    *  doivent se superposer sur la majorité des points échantillonnés —
    *  faute de quoi ce n'est qu'une simple boucle qui repasse près d'un
    *  ancien point sans revenir sur ses pas. */
-  function isGenuineOutAndBack(coords, i, j, thresholdM) {
-    const span = j - i;
-    if (span < 8) return false;
-
-    // Échantillonne 10 positions régulièrement espacées dans le temps de
-    // parcours. Cela évite de rater un aller-retour lorsque le routeur
-    // produit beaucoup de points sur l'aller et peu sur le retour (ou inversement).
+  function isGenuineOutAndBack(coords, cumulative, i, j, thresholdM) {
+    const spanM = cumulative[j] - cumulative[i];
+    if (spanM < 80) return false;
+    const atDistance = target => {
+      let lo = i, hi = j;
+      while (lo < hi) { const mid = (lo + hi) >>> 1; if (cumulative[mid] < target) lo = mid + 1; else hi = mid; }
+      return coords[lo];
+    };
+    // Échantillonne le trajet par longueur réelle, indépendant de la densité des sommets du routeur.
     let matches = 0, total = 0;
-    const samples = Math.min(10, Math.max(5, Math.floor(span / 4)));
+    const samples = 10;
     for (let n = 1; n < samples; n++) {
-      const ratio = n / samples;
-      const aIdx = Math.round(i + ratio * span * 0.5);
-      const bIdx = Math.round(j - ratio * span * 0.5);
-      const a = coords[aIdx], b = coords[bIdx];
+      const offset = spanM * 0.5 * n / samples;
+      const a = atDistance(cumulative[i] + offset);
+      const b = atDistance(cumulative[j] - offset);
       if (!a || !b) continue;
       const d = RPRouting.haversine({ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] });
       total++;

@@ -27,6 +27,8 @@ const RPUi = (() => {
   let lastResult = null;
   let lastSegments = null;
   let elevationTrackCoords = [];
+  let elevationTrackDistancesKm = [];
+  let elevationTrackStats = { gain: 0, loss: 0 };
   // (placingFor supprimé en v0.6.4 : le placement se fait via recherche
   // d'adresse ou appui long / clic droit, plus par simple clic sur la carte.)
   let startSetAutomatically = false;
@@ -952,6 +954,15 @@ const RPUi = (() => {
 
     elevationTrackCoords = coords;
     const { points, gain, loss } = profile;
+    elevationTrackStats = { gain, loss };
+    // Prépare une seule fois les distances cumulées pour le suivi tactile.
+    elevationTrackDistancesKm = [0];
+    for (let i = 1; i < coords.length; i++) {
+      elevationTrackDistancesKm.push(elevationTrackDistancesKm[i - 1] + RPRouting.haversine(
+        { lat: coords[i - 1][0], lon: coords[i - 1][1] },
+        { lat: coords[i][0], lon: coords[i][1] }
+      ) / 1000);
+    }
     // Marges augmentées pour laisser la place aux libellés d'échelle
     // (altitude à gauche, distance en bas) — demandés par l'utilisateur, le
     // graphique n'affichait auparavant aucun repère chiffré sur les axes.
@@ -1007,15 +1018,15 @@ const RPUi = (() => {
     const cursorDot = document.getElementById('rp-elevation-cursor-dot');
     if (!svg || !touchArea || !cursorLine || !cursorDot || !elevationTrackCoords.length) return;
 
-    let lastDistance = 0;
-    const cumulative = [0];
-    for (let i = 1; i < elevationTrackCoords.length; i++) {
-      cumulative.push(cumulative[i - 1] + RPRouting.haversine(
-        { lat: elevationTrackCoords[i - 1][0], lon: elevationTrackCoords[i - 1][1] },
-        { lat: elevationTrackCoords[i][0], lon: elevationTrackCoords[i][1] }
-      ) / 1000);
-    }
+    const cumulative = elevationTrackDistancesKm;
     const total = cumulative[cumulative.length - 1] || 1;
+    const profileDistances = profilePoints.map(p => p.d);
+    // Recherche dichotomique : nombre de points élevé sans boucle linéaire à chaque mouvement.
+    function lowerBound(arr, value) {
+      let lo = 0, hi = arr.length;
+      while (lo < hi) { const mid = (lo + hi) >>> 1; if (arr[mid] < value) lo = mid + 1; else hi = mid; }
+      return Math.min(arr.length - 1, lo);
+    }
 
     function updateFromEvent(ev) {
       const matrix = svg.getScreenCTM();
@@ -1026,8 +1037,7 @@ const RPUi = (() => {
       const distance = ((clampedX - chart.PAD_LEFT) / (chart.W - chart.PAD_LEFT - chart.PAD_RIGHT)) * chart.maxD;
       lastDistance = Math.max(0, Math.min(total, distance));
 
-      let idx = 1;
-      while (idx < cumulative.length - 1 && cumulative[idx] < lastDistance) idx++;
+      const idx = Math.max(1, lowerBound(cumulative, lastDistance));
       const d0 = cumulative[Math.max(0, idx - 1)], d1 = cumulative[idx] ?? d0;
       const a = elevationTrackCoords[Math.max(0, idx - 1)], b = elevationTrackCoords[idx] || a;
       const t = d1 > d0 ? Math.max(0, Math.min(1, (lastDistance - d0) / (d1 - d0))) : 0;
@@ -1035,8 +1045,7 @@ const RPUi = (() => {
       const lon = a[1] + (b[1] - a[1]) * t;
       const ele = (a[2] || 0) + ((b[2] || 0) - (a[2] || 0)) * t;
 
-      let pIdx = 1;
-      while (pIdx < profilePoints.length - 1 && profilePoints[pIdx].d < lastDistance) pIdx++;
+      const pIdx = Math.max(1, lowerBound(profileDistances, lastDistance));
       const p0 = profilePoints[Math.max(0, pIdx - 1)], p1 = profilePoints[pIdx] || p0;
       const profileT = p1.d > p0.d ? Math.max(0, Math.min(1, (lastDistance - p0.d) / (p1.d - p0.d))) : 0;
       const profileEle = p0.ele + (p1.ele - p0.ele) * profileT;
@@ -1044,7 +1053,7 @@ const RPUi = (() => {
       cursorLine.setAttribute('x1', clampedX); cursorLine.setAttribute('x2', clampedX);
       cursorDot.setAttribute('cx', clampedX); cursorDot.setAttribute('cy', cy);
       RPMap.showElevationMarker({ lat, lon }, lastDistance, ele);
-      if (statsForElevation()) statsForElevation().textContent = `D+ ${Math.round(computeElevationProfile(elevationTrackCoords)?.gain || 0)} m · D- ${Math.round(computeElevationProfile(elevationTrackCoords)?.loss || 0)} m · ${lastDistance.toFixed(2)} km · ${Math.round(ele)} m`;
+      if (statsForElevation()) statsForElevation().textContent = `D+ ${elevationTrackStats.gain} m · D- ${elevationTrackStats.loss} m · ${lastDistance.toFixed(2)} km · ${Math.round(ele)} m`;
     }
 
     function onPointerDown(ev) {
